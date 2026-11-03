@@ -7,7 +7,6 @@ crash.*.log
 
 *.tfvars
 *.tfvars.json
-!live/aws/honeynet/corpus/sensor.auto.tfvars
 
 override.tf
 override.tf.json

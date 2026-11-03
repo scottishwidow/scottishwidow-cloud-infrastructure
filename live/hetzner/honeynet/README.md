@@ -119,13 +119,9 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
    make init-bootstrap apply-bootstrap
    ```
 
-4. The Sensor address is committed in `live/aws/honeynet/corpus/sensor.auto.tfvars`, so a clone needs no step here. `make apply` generates the file if it is absent. Run this only if the address changes, and commit the result:
+   The `corpus` root reads this address by name, so apply `bootstrap` before `corpus`.
 
-   ```sh
-   make corpus-vars
-   ```
-
-5. Provision and configure:
+4. Provision and configure:
 
    ```sh
    make init
