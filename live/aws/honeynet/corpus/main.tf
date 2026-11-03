@@ -85,7 +85,7 @@ module "sensor_writer_role" {
         {
           test     = "IpAddress"
           variable = "aws:SourceIp"
-          values   = ["${data.hcloud_primary_ip.sensor.ip_address}/32"]
+          values   = ["${var.sensor_public_ipv4}/32"]
         },
       ]
     }

@@ -19,6 +19,7 @@ PKI_DIR          := pki
 CA_KEY           := $(PKI_DIR)/ca.key
 CA_CERT          := $(PKI_DIR)/ca.crt
 CA_VALIDITY_DAYS := 180
+CORPUS_VARS      := $(DIR_corpus)/sensor.auto.tfvars
 
 export HCLOUD_TOKEN := $(HONEYNET_HCLOUD_TOKEN)
 
@@ -29,7 +30,7 @@ export TF_VAR_proxy_port := 3128
 export TF_VAR_honeypot_port_redirects := {"21":2121,"22":2222,"23":2223,"80":8080}
 
 .NOTPARALLEL:
-.PHONY: init apply destroy inventory configure verify
+.PHONY: init apply destroy inventory corpus-vars configure verify
 
 init: $(addprefix init-,$(APPLY_ORDER))
 apply: $(addprefix apply-,$(APPLY_ORDER))
@@ -47,6 +48,12 @@ $(CA_CERT):
 		-addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
 		-addext "keyUsage=critical,keyCertSign,cRLSign"
 	mv $@.tmp $@
+
+corpus-vars:
+	$(call require_env)
+	printf 'sensor_public_ipv4 = "%s"\n' "$$($(TERRAFORM) -chdir=$(call stack_dir,bootstrap) output -raw sensor_public_ipv4)" > $(CORPUS_VARS).tmp
+	grep -qE '^sensor_public_ipv4 = "[0-9.]+"$$' $(CORPUS_VARS).tmp
+	mv $(CORPUS_VARS).tmp $(CORPUS_VARS)
 
 inventory:
 	$(call require_env)

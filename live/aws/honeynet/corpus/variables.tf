@@ -53,10 +53,14 @@ variable "corpus_abort_incomplete_multipart_upload_days" {
   }
 }
 
-variable "sensor_ipv4_name" {
-  description = "Name of the Sensor primary IPv4 in Hetzner. The writer role trust policy accepts a session only from this address. The `bootstrap` root creates the address under this name."
+variable "sensor_public_ipv4" {
+  description = "Public IPv4 of the Sensor. The writer role trust policy accepts a session only from this address. `make corpus-vars` writes it from the `bootstrap` output."
   type        = string
-  default     = "sensor-ipv4"
+
+  validation {
+    condition     = can(cidrhost("${var.sensor_public_ipv4}/32", 0))
+    error_message = "The Sensor address must be one IPv4 address."
+  }
 }
 
 variable "sensor_ca_certificate_path" {
