@@ -119,7 +119,7 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
    make init-bootstrap apply-bootstrap
    ```
 
-4. Write the Sensor address into the `corpus` variables, then commit `live/aws/honeynet/corpus/sensor.auto.tfvars`. Do this again only if the address changes:
+4. The Sensor address is committed in `live/aws/honeynet/corpus/sensor.auto.tfvars`, so a clone needs no step here. `make apply` generates the file if it is absent. Run this only if the address changes, and commit the result:
 
    ```sh
    make corpus-vars

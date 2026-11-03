@@ -37,7 +37,7 @@ apply: $(addprefix apply-,$(APPLY_ORDER))
 destroy: $(addprefix destroy-,$(DESTROY_ORDER))
 	rm -rf $(PKI_DIR)
 
-plan-corpus apply-corpus: $(CA_CERT)
+plan-corpus apply-corpus: $(CA_CERT) $(CORPUS_VARS)
 
 $(CA_CERT):
 	mkdir -p $(PKI_DIR)
@@ -49,11 +49,15 @@ $(CA_CERT):
 		-addext "keyUsage=critical,keyCertSign,cRLSign"
 	mv $@.tmp $@
 
-corpus-vars:
+$(CORPUS_VARS):
 	$(call require_env)
-	printf 'sensor_public_ipv4 = "%s"\n' "$$($(TERRAFORM) -chdir=$(call stack_dir,bootstrap) output -raw sensor_public_ipv4)" > $(CORPUS_VARS).tmp
-	grep -qE '^sensor_public_ipv4 = "[0-9.]+"$$' $(CORPUS_VARS).tmp
-	mv $(CORPUS_VARS).tmp $(CORPUS_VARS)
+	printf 'sensor_public_ipv4 = "%s"\n' "$$($(TERRAFORM) -chdir=$(call stack_dir,bootstrap) output -raw sensor_public_ipv4)" > $@.tmp
+	grep -qE '^sensor_public_ipv4 = "[0-9.]+"$$' $@.tmp
+	mv $@.tmp $@
+
+corpus-vars:
+	rm -f $(CORPUS_VARS)
+	$(MAKE) $(CORPUS_VARS)
 
 inventory:
 	$(call require_env)
