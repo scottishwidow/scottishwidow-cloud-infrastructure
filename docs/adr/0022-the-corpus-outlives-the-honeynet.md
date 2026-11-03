@@ -4,7 +4,7 @@ Date: 2026-10-23
 
 ## Status
 
-Accepted
+Accepted. [ADR-0023](./0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md) replaces the address mechanism, and makes the `bootstrap` root disposable.
 
 ## Context
 
