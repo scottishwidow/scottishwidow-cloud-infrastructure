@@ -1,0 +1,21 @@
+---
+- name: Install chrony
+  ansible.builtin.apt:
+    name: chrony
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Serve time to the Honeynet network
+  ansible.builtin.template:
+    src: honeynet.conf.j2
+    dest: /etc/chrony/conf.d/honeynet.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart chrony
+
+- name: Enable and start chrony
+  ansible.builtin.systemd_service:
+    name: chrony.service
+    enabled: true
+    state: started

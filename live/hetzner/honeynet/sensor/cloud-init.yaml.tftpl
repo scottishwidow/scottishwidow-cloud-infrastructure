@@ -63,6 +63,8 @@ write_files:
           ip protocol icmp accept
           tcp dport ${admin_ssh_port} accept
           ip saddr $honeynet tcp dport ${proxy_port} accept
+          ip saddr $honeynet tcp dport ${collector_port} accept
+          ip saddr $honeynet udp dport 123 accept
           ${indent(10, sinkhole_input_rules)}
         }
 

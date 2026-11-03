@@ -1,0 +1,50 @@
+data_dir: {{ vector_data_directory }}
+
+sources:
+  suricata_eve:
+    type: file
+    include: {{ vector_eve_logs | to_json }}
+    read_from: beginning
+
+transforms:
+  suricata_event_time:
+    type: remap
+    inputs:
+      - suricata_eve
+    # The record is kept verbatim in .message. Only the Vector timestamp changes,
+    # so that the dt partition is the event date and not the ingest date.
+    source: |
+      eve, err = parse_json(.message)
+      if err == null {
+        event_time, err = parse_timestamp(eve.timestamp, format: "%Y-%m-%dT%H:%M:%S%.f%z")
+        if err == null {
+          .timestamp = event_time
+        }
+      }
+
+sinks:
+  corpus_suricata:
+    type: aws_s3
+    inputs:
+      - suricata_event_time
+    bucket: {{ corpus_bucket_name }}
+    region: {{ corpus_region }}
+    auth:
+      credentials_file: {{ corpus_credential_aws_credentials_path }}
+      profile: {{ corpus_credential_aws_profile }}
+    key_prefix: "source=suricata/host={% raw %}{{ host }}{% endraw %}/dt=%Y-%m-%d/"
+    timezone: UTC
+    filename_append_uuid: true
+    compression: gzip
+    encoding:
+      codec: text
+    framing:
+      method: newline_delimited
+    healthcheck:
+      enabled: false
+    acknowledgements:
+      enabled: true
+    buffer:
+      type: disk
+      max_size: {{ vector_corpus_buffer_max_bytes }}
+      when_full: block

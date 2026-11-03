@@ -10,7 +10,9 @@
     - suricata
     - evebox
     - sinkhole
+    - time_server
     - corpus_credential
+    - vector
 
 - name: Harden SSH on every Honeynet host
   hosts: all
@@ -25,5 +27,6 @@
 
   roles:
     - honeypot_docker
+    - time_client
     - cowrie
     - opencanary

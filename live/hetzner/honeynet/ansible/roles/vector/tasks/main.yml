@@ -1,0 +1,61 @@
+---
+- name: Install the library the deb822 repository module needs
+  ansible.builtin.apt:
+    name: python3-debian
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Add the Vector repository
+  ansible.builtin.deb822_repository:
+    name: vector
+    types: deb
+    uris: "{{ vector_apt_uri }}"
+    suites: "{{ vector_apt_suite }}"
+    components: "{{ vector_apt_component }}"
+    signed_by: "{{ lookup('ansible.builtin.file', 'datadog-apt.asc') }}"
+    state: present
+  register: vector_repository
+
+- name: Read the package index of the Vector repository
+  ansible.builtin.apt:
+    update_cache: true
+  when: vector_repository is changed
+
+- name: Install Vector
+  ansible.builtin.apt:
+    name: vector
+    update_cache: true
+    cache_valid_time: 3600
+    policy_rc_d: 101
+
+- name: Let Vector read the EVE log and the Sensor credential
+  ansible.builtin.user:
+    name: vector
+    groups: "{{ vector_reader_groups }}"
+    append: true
+  notify: Restart Vector
+
+- name: Give the data directory to the Vector account
+  ansible.builtin.file:
+    path: "{{ vector_data_directory }}"
+    state: directory
+    owner: vector
+    group: vector
+    recurse: true
+  notify: Restart Vector
+
+- name: Write the Vector config
+  ansible.builtin.template:
+    src: vector.yaml.j2
+    dest: "{{ vector_config_path }}"
+    owner: root
+    group: vector
+    mode: "0640"
+    validate: vector validate --no-environment %s
+  notify: Restart Vector
+
+- name: Enable and start Vector
+  ansible.builtin.systemd_service:
+    name: vector.service
+    enabled: true
+    state: started

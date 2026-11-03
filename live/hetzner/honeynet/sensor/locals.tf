@@ -41,5 +41,6 @@ locals {
     dnat_rules           = local.dnat_rules
     sinkhole_input_rules = join("\n", local.sinkhole_input_rules)
     proxy_port           = var.proxy_port
+    collector_port       = var.collector_port
   })
 }
