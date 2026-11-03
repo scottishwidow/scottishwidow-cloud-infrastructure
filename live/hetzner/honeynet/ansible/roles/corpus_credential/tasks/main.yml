@@ -1,0 +1,64 @@
+---
+- name: Require the Sensor CA on the workstation
+  ansible.builtin.stat:
+    path: "{{ corpus_credential_ca_key_path }}"
+  delegate_to: localhost
+  become: false
+  register: corpus_credential_ca_key
+  failed_when: not corpus_credential_ca_key.stat.exists
+
+- name: Install the library the crypto modules need
+  ansible.builtin.apt:
+    name: python3-cryptography
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Create the credential directory
+  ansible.builtin.file:
+    path: "{{ corpus_credential_directory }}"
+    state: directory
+    owner: root
+    group: "{{ corpus_credential_group }}"
+    mode: "0750"
+
+- name: Generate the Sensor private key on the Sensor
+  community.crypto.openssl_privatekey:
+    path: "{{ corpus_credential_key_path }}"
+    type: ECC
+    curve: secp256r1
+    owner: root
+    group: "{{ corpus_credential_group }}"
+    mode: "0640"
+
+- name: Create a signing request for the Sensor certificate
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ corpus_credential_key_path }}"
+    common_name: "{{ corpus_credential_common_name }}"
+    basic_constraints:
+      - CA:FALSE
+    basic_constraints_critical: true
+    key_usage:
+      - digitalSignature
+    key_usage_critical: true
+  register: corpus_credential_csr
+  changed_when: false
+
+- name: Issue the Sensor certificate from the CA on the workstation
+  community.crypto.x509_certificate_pipe:
+    csr_content: "{{ corpus_credential_csr.csr }}"
+    provider: ownca
+    ownca_path: "{{ corpus_credential_ca_certificate_path }}"
+    ownca_privatekey_path: "{{ corpus_credential_ca_key_path }}"
+    ownca_not_after: "{{ corpus_credential_validity }}"
+    ownca_digest: sha256
+  delegate_to: localhost
+  become: false
+  register: corpus_credential_certificate
+
+- name: Write the Sensor certificate
+  ansible.builtin.copy:
+    content: "{{ corpus_credential_certificate.certificate }}"
+    dest: "{{ corpus_credential_certificate_path }}"
+    owner: root
+    group: "{{ corpus_credential_group }}"
+    mode: "0640"

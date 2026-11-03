@@ -1,0 +1,13 @@
+---
+corpus_credential_directory: /etc/honeynet/corpus
+corpus_credential_group: root
+
+corpus_credential_key_path: "{{ corpus_credential_directory }}/sensor.key"
+corpus_credential_certificate_path: "{{ corpus_credential_directory }}/sensor.crt"
+
+corpus_credential_common_name: honeynet-sensor
+corpus_credential_validity: +90d
+
+corpus_credential_ca_directory: "{{ playbook_dir }}/../../pki"
+corpus_credential_ca_certificate_path: "{{ corpus_credential_ca_directory }}/ca.crt"
+corpus_credential_ca_key_path: "{{ corpus_credential_ca_directory }}/ca.key"

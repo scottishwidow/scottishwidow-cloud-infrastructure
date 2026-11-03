@@ -1,6 +1,7 @@
 TERRAFORM        ?= terraform
 ANSIBLE_PLAYBOOK ?= ansible-playbook
 TF_ARGS          ?=
+OPENSSL          ?= openssl
 
 REQUIRED_ENV  := AWS_PROFILE HONEYNET_HCLOUD_TOKEN
 
@@ -13,6 +14,11 @@ DIR_corpus     := ../../aws/honeynet/corpus
 DIR_network    := network
 DIR_sensor     := sensor
 DIR_honeypots  := honeypots
+
+PKI_DIR          := pki
+CA_KEY           := $(PKI_DIR)/ca.key
+CA_CERT          := $(PKI_DIR)/ca.crt
+CA_VALIDITY_DAYS := 180
 
 export HCLOUD_TOKEN := $(HONEYNET_HCLOUD_TOKEN)
 
@@ -28,6 +34,19 @@ export TF_VAR_honeypot_port_redirects := {"21":2121,"22":2222,"23":2223,"80":808
 init: $(addprefix init-,$(APPLY_ORDER))
 apply: $(addprefix apply-,$(APPLY_ORDER))
 destroy: $(addprefix destroy-,$(DESTROY_ORDER))
+	rm -rf $(PKI_DIR)
+
+plan-corpus apply-corpus: $(CA_CERT)
+
+$(CA_CERT):
+	mkdir -p $(PKI_DIR)
+	chmod 700 $(PKI_DIR)
+	umask 077 && $(OPENSSL) req -x509 -noenc -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
+		-keyout $(CA_KEY) -out $@.tmp -days $(CA_VALIDITY_DAYS) -sha256 \
+		-subj "/CN=honeynet-sensor-ca" \
+		-addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+		-addext "keyUsage=critical,keyCertSign,cRLSign"
+	mv $@.tmp $@
 
 inventory:
 	$(call require_env)

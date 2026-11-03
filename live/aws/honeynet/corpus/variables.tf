@@ -52,3 +52,38 @@ variable "corpus_abort_incomplete_multipart_upload_days" {
     error_message = "Abort after must be at least 1 day."
   }
 }
+
+variable "sensor_ipv4_name" {
+  description = "Name of the Sensor primary IPv4 in Hetzner. The writer role trust policy accepts a session only from this address. The `bootstrap` root creates the address under this name."
+  type        = string
+  default     = "sensor-ipv4"
+}
+
+variable "sensor_ca_certificate_path" {
+  description = "Path to the PEM certificate of the Sensor CA. The CA is generated on the workstation at each provisioning, and the trust anchor takes this certificate as its bundle."
+  type        = string
+  default     = "../../../hetzner/honeynet/pki/ca.crt"
+}
+
+variable "sensor_writer_name" {
+  description = "Name of the Roles Anywhere trust anchor, profile, and IAM role that let the Sensor write to the Corpus"
+  type        = string
+  default     = "honeynet-sensor-corpus-writer"
+}
+
+variable "sensor_writer_profile_enabled" {
+  description = "Whether the Roles Anywhere profile issues sessions. Set to false to revoke every Sensor certificate, because there is no CRL."
+  type        = bool
+  default     = true
+}
+
+variable "sensor_writer_session_duration_seconds" {
+  description = "Lifetime of the credentials that one Roles Anywhere session issues"
+  type        = number
+  default     = 3600
+
+  validation {
+    condition     = var.sensor_writer_session_duration_seconds >= 900 && var.sensor_writer_session_duration_seconds <= 43200
+    error_message = "Session duration must be between 900 and 43200 seconds."
+  }
+}

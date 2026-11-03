@@ -31,3 +31,4 @@ live/hetzner/ovpn/ansible/clients/
 
 live/hetzner/honeynet/ansible/inventory/*.json*
 live/hetzner/honeynet/ansible/.known_hosts
+live/hetzner/honeynet/pki/

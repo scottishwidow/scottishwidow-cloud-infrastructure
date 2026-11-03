@@ -119,15 +119,28 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
    make init-bootstrap apply-bootstrap
    ```
 
+   The `corpus` root reads this address by name, so apply `bootstrap` before `corpus`.
+
 4. Provision and configure:
 
    ```sh
    make init
-   make apply      # corpus, network, sensor, honeypots
-   make configure  # writes the inventory, runs site.yml
+   make apply      # Sensor CA, then corpus, network, sensor, honeypots
+   make configure  # writes the inventory, runs site.yml, issues the Sensor certificate
    make verify     # runs verify.yml
    ```
-`make destroy` removes the disposable roots in the reverse order. It does not remove `bootstrap`, so the Sensor keeps its address across a destroy and a new apply, and it does not remove `corpus`, so the Corpus keeps 13 months of telemetry. See [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md). To move an address that an older revision created in the `sensor` root, follow [the address move runbook](../../../docs/runbooks/honeynet-sensor-address-move.md).
+
+The order is fixed:
+
+1. `make apply` generates the Sensor CA in `pki/` on the workstation, if it does not exist. The CA private key does not leave the workstation.
+2. The `corpus` apply registers the CA certificate as the Roles Anywhere trust anchor.
+3. `make configure` generates the Sensor private key on the Sensor and issues a new Sensor certificate from the CA. Each run issues a new certificate. Nothing on the Sensor renews it.
+
+`make destroy` removes the disposable roots in the reverse order, then deletes `pki/`. The next `make apply` generates a new CA. It does not remove `bootstrap`, so the Sensor keeps its address across a destroy and a new apply, and it does not remove `corpus`, so the Corpus keeps 13 months of telemetry. See [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md).
+
+To destroy `bootstrap` as well, first set `delete_protection = false` on the primary IP and apply. A recreate then gets a new address from Hetzner, and `corpus` must be applied after `bootstrap` to put that address in the trust policy. The `corpus` root cannot plan while no primary IP exists. See [ADR-0023](../../../docs/adr/0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md).
+
+To move an address that an older revision created in the `sensor` root, follow [the address move runbook](../../../docs/runbooks/honeynet-sensor-address-move.md).
 
 ## Operation
 
@@ -147,6 +160,7 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
 - To add a honeypot port, add it to `honeypot_tcp_ports` in the Sensor root. If the port is below 1024, also map it in `TF_VAR_honeypot_port_redirects` in the Makefile.
 - Do not open Containment. Send new outbound protocols to the Sinkhole.
 - The Honeynet collects no malware samples.
+- To revoke the Sensor credential, set `sensor_writer_profile_enabled = false` in the `corpus` root and run `make apply-corpus`. There is no CRL.
 - The Log Volume has delete protection. To destroy the Sensor and keep the logs, run `terraform -chdir=sensor state rm module.sensor_log_volume.hcloud_volume.this` before `make destroy`. Before the next `make apply`, import it again with `terraform -chdir=sensor import module.sensor_log_volume.hcloud_volume.this <volume_id>`.
 - To delete the Log Volume, set `delete_protection = false` on the `sensor_log_volume` module, apply, then run `make destroy`.
 - Every banner and identity comes from `honeypot_persona` in `ansible/playbooks/group_vars/all.yml`. Do not set a banner in a role.
@@ -159,3 +173,4 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
 - [ADR-0016](../../../docs/adr/0016-the-sinkhole-runs-in-rootless-podman-on-the-sensor.md): the Sinkhole
 - [ADR-0017](../../../docs/adr/0017-the-sensor-logs-live-on-a-volume-that-outlives-the-sensor.md): the Log Volume
 - [ADR-0017](../../../docs/adr/0017-every-honeypot-service-claims-one-ubuntu-persona.md): the Persona
+- [ADR-0019](../../../docs/adr/0019-the-sensor-holds-no-long-lived-aws-credential.md): the Sensor credential

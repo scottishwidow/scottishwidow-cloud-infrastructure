@@ -10,6 +10,7 @@
     - suricata
     - evebox
     - sinkhole
+    - corpus_credential
 
 - name: Harden SSH on every Honeynet host
   hosts: all
