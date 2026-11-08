@@ -52,14 +52,17 @@ inventory:
 	$(call require_env)
 	$(TERRAFORM) -chdir=$(call stack_dir,sensor) output -json ansible_inventory > ansible/inventory/sensor.json.tmp
 	$(TERRAFORM) -chdir=$(call stack_dir,honeypots) output -json ansible_inventory > ansible/inventory/honeypots.json.tmp
+	$(TERRAFORM) -chdir=$(call stack_dir,corpus) output -json ansible_inventory > ansible/inventory/corpus.json.tmp
 	mv ansible/inventory/sensor.json.tmp ansible/inventory/sensor.json
 	mv ansible/inventory/honeypots.json.tmp ansible/inventory/honeypots.json
+	mv ansible/inventory/corpus.json.tmp ansible/inventory/corpus.json
 	rm -f ansible/.known_hosts
 
 configure: inventory
 	cd ansible && $(ANSIBLE_PLAYBOOK) playbooks/site.yml
 
 verify:
+	$(call require_env)
 	cd ansible && $(ANSIBLE_PLAYBOOK) playbooks/verify.yml
 
 init-%:

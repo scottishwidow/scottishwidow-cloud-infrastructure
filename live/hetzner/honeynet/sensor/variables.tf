@@ -76,6 +76,12 @@ variable "proxy_port" {
   default     = 3128
 }
 
+variable "collector_port" {
+  description = "TCP port of the Vector collector on the Sensor. The Honeypots send Session Evidence to it. Only the Honeynet network can reach it"
+  type        = number
+  default     = 6000
+}
+
 variable "sinkhole_ports" {
   description = "Ports of the Sinkhole on the Sensor private IP. The Sensor sends new Honeypot connections to HTTP, HTTPS and DNS outside the Honeynet to them. Only the Honeynet network can reach them"
   type = object({

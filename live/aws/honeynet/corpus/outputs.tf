@@ -27,3 +27,18 @@ output "sensor_writer_role_arn" {
   description = "ARN of the write-only IAM role that the Sensor assumes"
   value       = module.sensor_writer_role.arn
 }
+
+output "ansible_inventory" {
+  description = "Corpus values that the Sensor configuration and the verification run read"
+  value = {
+    sensors = {
+      vars = {
+        corpus_bucket_name             = module.corpus.s3_bucket_id
+        corpus_region                  = data.aws_region.current.region
+        corpus_sensor_trust_anchor_arn = module.sensor_roles_anywhere.trust_anchor_arn
+        corpus_sensor_profile_arn      = module.sensor_roles_anywhere.profile_arn
+        corpus_sensor_role_arn         = module.sensor_writer_role.arn
+      }
+    }
+  }
+}

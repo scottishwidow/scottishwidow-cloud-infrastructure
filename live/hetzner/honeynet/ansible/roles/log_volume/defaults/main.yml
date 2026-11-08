@@ -8,5 +8,8 @@ log_volume_bind_mounts:
   - source: "{{ log_volume_mount_point }}/evebox"
     target: /var/lib/evebox
     service: evebox.service
+  - source: "{{ log_volume_mount_point }}/vector"
+    target: /var/lib/vector
+    service: vector.service
 
 log_volume_mount_unit: "{{ log_volume_mount_point[1:] | replace('/', '-') }}.mount"

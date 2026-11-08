@@ -737,6 +737,9 @@
       - where: /var/lib/evebox
         fsroot: /evebox
         service: evebox.service
+      - where: /var/lib/vector
+        fsroot: /vector
+        service: vector.service
 
   tasks:
     - name: Read the disk behind the Log Volume device
@@ -783,7 +786,7 @@
       loop_control:
         label: "{{ item.item.where }}"
 
-    - name: Require that Suricata and EveBox do not start without the Log Volume
+    - name: Require that Suricata, EveBox and Vector do not start without the Log Volume
       ansible.builtin.assert:
         that: item.item.where in item.stdout.split()
         fail_msg: "{{ item.item.service }} requires the mounts '{{ item.stdout }}', expected {{ item.item.where }}"
@@ -1102,6 +1105,421 @@
           EveBox listen addresses={{ verify_evebox_listen_addresses }};
           SSH tunnel={{ verify_evebox_tunnel.stdout }} {{ verify_evebox_tunnel.stderr | trim }};
           EveBox query '{{ verify_evebox_canary_query }}'={{ verify_evebox_alerts.status | default('') }} {{ verify_evebox_alerts.msg | default('') }}
+
+- name: Verify the path from the Sensor to the Corpus
+  hosts: sensors
+  gather_facts: false
+
+  vars_files:
+    - ../roles/corpus_credential/defaults/main.yml
+
+  vars:
+    verify_eve_log: /var/log/suricata/eve.json
+    verify_corpus_delivery_retries: 42
+    verify_corpus_delivery_delay: 10
+    verify_sensor_credentials: "{{ verify_sensor_session.stdout | default('{}', true) | from_json }}"
+    verify_probe_key: verify/sensor-credential/{{ inventory_hostname }}-{{ verify_corpus_probe_epoch.stdout }}
+    verify_workstation_probe_key: "{{ verify_probe_key }}-workstation"
+
+  tasks:
+    - name: Read the input chain of the Sensor
+      ansible.builtin.command:
+        cmd: nft --stateless list chain inet filter input
+      register: verify_input_chain
+      changed_when: false
+      check_mode: false
+
+    - name: Read whether the Sensor certificate stays valid for the minimum days
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -noout
+          - -enddate
+          - -checkend
+          - "{{ corpus_credential_minimum_validity_days * 86400 }}"
+          - -in
+          - "{{ corpus_credential_certificate_path }}"
+      register: verify_certificate_validity
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Request a Corpus session as the Vector account
+      ansible.builtin.command:
+        argv: "{{ ['runuser', '-u', 'vector', '--', corpus_credential_signing_helper_path] + corpus_credential_process_arguments }}"
+        chdir: /
+      register: verify_sensor_session
+      changed_when: false
+      failed_when: false
+      check_mode: false
+      no_log: true
+
+    - name: Read the Sensor time for the probe object
+      ansible.builtin.command:
+        cmd: date +%s
+      register: verify_corpus_probe_epoch
+      changed_when: false
+      check_mode: false
+
+    - name: Write, read, list and delete in the Corpus with the Sensor session from the Sensor
+      ansible.builtin.command:
+        argv: >-
+          {{ ['curl', '--silent', '--show-error', '--fail-with-body', '--config', '-',
+              '--request', item.method, '--write-out', '%header{x-amz-version-id}']
+             + (['--data-binary', ''] if item.method == 'PUT' else [])
+             + ['https://' ~ corpus_bucket_name ~ '.s3.' ~ corpus_region ~ '.amazonaws.com/' ~ item.path] }}
+        stdin: |
+          aws-sigv4 = "aws:amz:{{ corpus_region }}:s3"
+          user = "{{ verify_sensor_credentials.AccessKeyId }}:{{ verify_sensor_credentials.SecretAccessKey }}"
+          header = "x-amz-security-token: {{ verify_sensor_credentials.SessionToken }}"
+      loop:
+        - action: write
+          method: PUT
+          path: "{{ verify_probe_key }}"
+        - action: read
+          method: GET
+          path: "{{ verify_probe_key }}"
+        - action: list
+          method: GET
+          path: "?list-type=2&max-keys=1"
+        - action: delete
+          method: DELETE
+          path: "{{ verify_probe_key }}"
+      loop_control:
+        label: "{{ item.action }}"
+      register: verify_sensor_session_actions
+      changed_when: false
+      failed_when: false
+      when: verify_sensor_session.rc == 0
+      no_log: true
+
+    - name: Write to the Corpus with the Sensor session from the workstation
+      ansible.builtin.command:
+        argv:
+          - env
+          - -u
+          - AWS_PROFILE
+          - -u
+          - AWS_DEFAULT_PROFILE
+          - aws
+          - --region
+          - "{{ corpus_region }}"
+          - s3api
+          - put-object
+          - --bucket
+          - "{{ corpus_bucket_name }}"
+          - --key
+          - "{{ verify_workstation_probe_key }}"
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ verify_sensor_credentials.AccessKeyId }}"
+        AWS_SECRET_ACCESS_KEY: "{{ verify_sensor_credentials.SecretAccessKey }}"
+        AWS_SESSION_TOKEN: "{{ verify_sensor_credentials.SessionToken }}"
+      delegate_to: localhost
+      become: false
+      register: verify_workstation_write
+      changed_when: false
+      failed_when: false
+      when: verify_sensor_session.rc == 0
+      no_log: true
+
+    - name: Remove the probe objects with the Operator profile
+      ansible.builtin.command:
+        argv:
+          - aws
+          - --region
+          - "{{ corpus_region }}"
+          - s3api
+          - delete-object
+          - --bucket
+          - "{{ corpus_bucket_name }}"
+          - --key
+          - "{{ item.key }}"
+          - --version-id
+          - "{{ item.version_id }}"
+      vars:
+        verify_sensor_write: "{{ verify_sensor_session_actions.results | default([]) | selectattr('item.action', 'equalto', 'write') | first | default({}) }}"
+        verify_probe_writes: >-
+          {{ ([{'key': verify_probe_key, 'version_id': verify_sensor_write.stdout | trim}]
+              if verify_sensor_write.rc | default(1) == 0 else [])
+             + ([{'key': verify_workstation_probe_key, 'version_id': (verify_workstation_write.stdout | from_json).VersionId}]
+              if verify_workstation_write.rc | default(1) == 0 else []) }}
+      loop: "{{ verify_probe_writes }}"
+      loop_control:
+        label: "{{ item.key }}"
+      delegate_to: localhost
+      become: false
+      changed_when: true
+      failed_when: false
+
+    - name: Request a Corpus session from the workstation address with a test certificate
+      delegate_to: localhost
+      become: false
+      block:
+        - name: Create a scratch directory for the test certificate
+          ansible.builtin.tempfile:
+            state: directory
+            suffix: -honeynet-verify
+          register: verify_scratch
+
+        - name: Download the signing helper to the scratch directory
+          ansible.builtin.get_url:
+            url: "{{ corpus_credential_signing_helper_url }}"
+            checksum: "{{ corpus_credential_signing_helper_checksum }}"
+            dest: "{{ verify_scratch.path }}/aws_signing_helper"
+            mode: "0700"
+
+        - name: Generate the test private key
+          community.crypto.openssl_privatekey:
+            path: "{{ verify_scratch.path }}/test.key"
+            type: ECC
+            curve: secp256r1
+            mode: "0600"
+
+        - name: Create a signing request for the test certificate
+          community.crypto.openssl_csr_pipe:
+            privatekey_path: "{{ verify_scratch.path }}/test.key"
+            common_name: honeynet-verify-workstation
+            basic_constraints:
+              - CA:FALSE
+            basic_constraints_critical: true
+            key_usage:
+              - digitalSignature
+            key_usage_critical: true
+          register: verify_test_csr
+          changed_when: false
+
+        - name: Issue a test certificate from the Sensor CA for one day
+          community.crypto.x509_certificate:
+            path: "{{ verify_scratch.path }}/test.crt"
+            csr_content: "{{ verify_test_csr.csr }}"
+            provider: ownca
+            ownca_path: "{{ corpus_credential_ca_certificate_path }}"
+            ownca_privatekey_path: "{{ corpus_credential_ca_key_path }}"
+            ownca_not_after: +1d
+            ownca_digest: sha256
+            mode: "0600"
+
+        - name: Request a Corpus session with the test certificate
+          ansible.builtin.command:
+            argv:
+              - "{{ verify_scratch.path }}/aws_signing_helper"
+              - credential-process
+              - --certificate
+              - "{{ verify_scratch.path }}/test.crt"
+              - --private-key
+              - "{{ verify_scratch.path }}/test.key"
+              - --trust-anchor-arn
+              - "{{ corpus_sensor_trust_anchor_arn }}"
+              - --profile-arn
+              - "{{ corpus_sensor_profile_arn }}"
+              - --role-arn
+              - "{{ corpus_sensor_role_arn }}"
+              - --region
+              - "{{ corpus_region }}"
+          register: verify_workstation_session
+          changed_when: false
+          failed_when: false
+          no_log: true
+
+      always:
+        - name: Discard the test certificate and key
+          ansible.builtin.file:
+            path: "{{ verify_scratch.path }}"
+            state: absent
+          when: verify_scratch.path is defined
+
+    - name: Read the EVE log size and the Sensor time before the Corpus canary
+      ansible.builtin.shell:
+        cmd: stat --format %s {{ verify_eve_log }} && date -u +%Y-%m-%dT%H:%M:%S && date +%s
+      register: verify_corpus_eve_start
+      changed_when: false
+      check_mode: false
+
+    - name: Keep the start of the Corpus canary
+      ansible.builtin.set_fact:
+        verify_corpus_eve_offset: "{{ verify_corpus_eve_start.stdout_lines[0] }}"
+        verify_corpus_since: "{{ verify_corpus_eve_start.stdout_lines[1] }}"
+        verify_corpus_nonce: corpus-{{ verify_corpus_eve_start.stdout_lines[2] }}
+
+    - name: Send the canary through Vector while it cannot reach the object store, and restart Vector
+      block:
+        - name: Cut Vector off from the object store
+          ansible.builtin.command:
+            cmd: nft -f -
+            stdin: |
+              table inet verify_corpus {
+                chain output {
+                  type filter hook output priority filter; policy accept;
+                  meta skuid "vector" tcp dport 443 reject with tcp reset
+                }
+              }
+          changed_when: true
+
+        - name: Send the canary alert string to Cowrie on port 23
+          ansible.builtin.command:
+            argv:
+              - python3
+              - "{{ playbook_dir }}/files/cowrie_telnet_probe.py"
+              - --host
+              - "{{ ansible_host }}"
+              - --username
+              - "{{ verify_cowrie_username }}"
+              - --password
+              - "{{ verify_cowrie_password }}"
+              - --command
+              - echo {{ suricata_canary_rules.alert.content }} {{ verify_corpus_nonce }}
+          delegate_to: localhost
+          become: false
+          changed_when: false
+          failed_when: false
+
+        - name: Read the canary EVE event
+          ansible.builtin.command:
+            argv:
+              - python3
+              - -c
+              - |
+                import json, socket, sys
+                from datetime import datetime, timezone
+                log_path, offset, workstation_ip, sid = sys.argv[1], int(sys.argv[2]), sys.argv[3], int(sys.argv[4])
+                with open(log_path, "rb") as log:
+                    log.seek(0, 2)
+                    log.seek(offset if log.tell() >= offset else 0)
+                    for raw in log:
+                        line = raw.decode().rstrip("\n")
+                        try:
+                            event = json.loads(line)
+                        except ValueError:
+                            continue
+                        if (event.get("event_type") == "alert" and event.get("src_ip") == workstation_ip
+                                and event["alert"].get("signature_id") == sid):
+                            event_time = datetime.strptime(event["timestamp"], "%Y-%m-%dT%H:%M:%S.%f%z")
+                            print(json.dumps({
+                                "line": line,
+                                "dt": event_time.astimezone(timezone.utc).strftime("%Y-%m-%d"),
+                                "host": socket.gethostname(),
+                            }))
+                            break
+              - "{{ verify_eve_log }}"
+              - "{{ verify_corpus_eve_offset }}"
+              - "{{ verify_workstation_ip }}"
+              - "{{ suricata_canary_rules.alert.sid }}"
+          register: verify_corpus_canary_event
+          changed_when: false
+          check_mode: false
+          retries: 12
+          delay: 5
+          until: verify_corpus_canary_event.stdout | length > 0
+          ignore_errors: true
+
+        - name: Wait for Vector to read the canary event into its buffer
+          ansible.builtin.pause:
+            seconds: 15
+
+        - name: Restart Vector while it cannot reach the object store
+          ansible.builtin.systemd_service:
+            name: vector.service
+            state: restarted
+
+      always:
+        - name: Connect Vector to the object store again
+          ansible.builtin.command:
+            cmd: nft delete table inet verify_corpus
+          changed_when: true
+          failed_when: false
+
+    - name: Find the canary EVE event in the Corpus under its partition
+      ansible.builtin.shell:
+        cmd: |
+          aws s3api list-objects-v2 --region "$VERIFY_REGION" --bucket "$VERIFY_BUCKET" --prefix "$VERIFY_PREFIX" \
+            --query 'Contents[].[LastModified, Key]' --output text \
+          | awk -v since="$VERIFY_SINCE" '$1 >= since { print $2 }' \
+          | while read -r key; do
+              if aws s3 cp --region "$VERIFY_REGION" --quiet "s3://$VERIFY_BUCKET/$key" - < /dev/null \
+                | gunzip -c | grep -qxF -e "$VERIFY_CANARY_LINE"; then
+                echo "$key"
+                break
+              fi
+            done \
+          | grep .
+      environment:
+        VERIFY_REGION: "{{ corpus_region }}"
+        VERIFY_BUCKET: "{{ corpus_bucket_name }}"
+        VERIFY_PREFIX: source=suricata/host={{ verify_corpus_canary.host }}/dt={{ verify_corpus_canary.dt }}/
+        VERIFY_SINCE: "{{ verify_corpus_since }}"
+        VERIFY_CANARY_LINE: "{{ verify_corpus_canary.line }}"
+      vars:
+        verify_corpus_canary: "{{ verify_corpus_canary_event.stdout | from_json }}"
+      delegate_to: localhost
+      become: false
+      register: verify_corpus_canary_object
+      changed_when: false
+      retries: "{{ verify_corpus_delivery_retries }}"
+      delay: "{{ verify_corpus_delivery_delay }}"
+      until: verify_corpus_canary_object.rc == 0
+      when: verify_corpus_canary_event.stdout | default('') | length > 0
+      ignore_errors: true
+
+    - name: Require Honeynet-only collector and time ports, a write-only Sensor session usable only from the Sensor, a refused workstation session, a valid certificate and the canary in the Corpus
+      vars:
+        verify_port_rules: >-
+          {{ verify_input_chain.stdout_lines | map('trim')
+             | select('search', '(tcp dport ' ~ collector_port ~ '|udp dport 123) ') | list }}
+        verify_honeynet_source: "{{ ('ip saddr ' ~ honeynet_network_ip_range) | regex_escape }} "
+        verify_session_results: "{{ verify_sensor_session_actions.results | default([]) }}"
+        verify_session_write: "{{ verify_session_results | selectattr('item.action', 'equalto', 'write') | first | default({}) }}"
+        verify_session_denied: "{{ verify_session_results | selectattr('item.action', 'in', ['read', 'list', 'delete']) | list }}"
+      ansible.builtin.assert:
+        that:
+          - verify_port_rules | select('search', 'tcp dport ' ~ collector_port ~ ' ') | list | length > 0
+          - verify_port_rules | select('search', 'udp dport 123 ') | list | length > 0
+          - verify_port_rules | reject('match', verify_honeynet_source) | list == []
+          - verify_certificate_validity.rc == 0
+          - verify_sensor_session.rc == 0
+          - verify_session_write.rc | default(1) == 0
+          - verify_session_denied | length == 3
+          - verify_session_denied | map(attribute='rc', default=0) | select('equalto', 0) | list == []
+          - verify_session_denied | map(attribute='stdout', default='') | reject('search', '<Code>AccessDenied</Code>') | list == []
+          - verify_workstation_write.rc | default(0) != 0
+          - "'AccessDenied' in verify_workstation_write.stderr | default('')"
+          - verify_workstation_session.rc | default(0) != 0
+          - "'AccessDenied' in verify_workstation_session.stderr | default('')"
+          - verify_corpus_canary_event.stdout | default('') | length > 0
+          - verify_corpus_canary_object.rc | default(1) == 0
+        fail_msg: >-
+          collector and time port rules={{ verify_port_rules }};
+          certificate={{ verify_certificate_validity.stdout_lines | default([]) }}, expected valid for {{ corpus_credential_minimum_validity_days }} more days;
+          Sensor session rc={{ verify_sensor_session.rc | default('') }} {{ verify_sensor_session.stderr | default('') | trim }};
+          Sensor session write rc={{ verify_session_write.rc | default('not run') }} {{ verify_session_write.stdout | default('') | trim }} {{ verify_session_write.stderr | default('') | trim }};
+          Sensor session read, list and delete={{ verify_session_denied | map(attribute='stdout', default='not run') | map('trim') | list }};
+          Sensor session write from the workstation rc={{ verify_workstation_write.rc | default('not run') }} {{ verify_workstation_write.stderr | default('') | trim }};
+          workstation session rc={{ verify_workstation_session.rc | default('not run') }} {{ verify_workstation_session.stderr | default('') | trim }};
+          canary EVE event={{ verify_corpus_canary_event.stdout | default('none', true) }};
+          canary object={{ verify_corpus_canary_object.stdout | default('none', true) }} {{ verify_corpus_canary_object.stderr | default('') | trim }}
+
+- name: Verify the time service from each Honeypot
+  hosts: honeypots
+  gather_facts: false
+
+  tasks:
+    - name: Read the time server and the synchronisation state
+      ansible.builtin.shell:
+        cmd: >-
+          timedatectl show-timesync --property=ServerAddress --value
+          && timedatectl show --property=NTPSynchronized --value
+      register: verify_timesync
+      changed_when: false
+      check_mode: false
+      retries: 12
+      delay: 5
+      until: verify_timesync.stdout_lines | default([]) == [sensor_private_ip, 'yes']
+      ignore_errors: true
+
+    - name: Require time synchronised against the Sensor private IP
+      ansible.builtin.assert:
+        that: verify_timesync.stdout_lines | default([]) == [sensor_private_ip, 'yes']
+        fail_msg: "time server and synchronised={{ verify_timesync.stdout_lines | default([]) }}, expected {{ [sensor_private_ip, 'yes'] }}"
 
 - name: Verify that the Sensor fails open with Suricata stopped in IPS mode
   hosts: sensors

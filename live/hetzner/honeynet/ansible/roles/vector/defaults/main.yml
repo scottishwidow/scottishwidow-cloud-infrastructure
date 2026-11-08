@@ -1,0 +1,17 @@
+---
+vector_apt_uri: https://apt.vector.dev/
+vector_apt_suite: stable
+vector_apt_component: vector-0
+
+vector_config_path: /etc/vector/vector.yaml
+vector_data_directory: /var/lib/vector
+
+vector_reader_groups:
+  - "{{ suricata_group }}"
+  - "{{ corpus_credential_group }}"
+
+vector_eve_logs:
+  - /var/log/suricata/eve.json
+  - /var/log/suricata/eve.json.1
+
+vector_corpus_buffer_max_bytes: 5368709120

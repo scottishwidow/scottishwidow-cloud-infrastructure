@@ -1,0 +1,45 @@
+---
+- name: Create the network drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/network/05-honeynet.network.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Ignore time servers that DHCP offers
+  ansible.builtin.template:
+    src: no-dhcp-ntp.conf.j2
+    dest: /etc/systemd/network/05-honeynet.network.d/10-no-dhcp-ntp.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Reload the network config
+
+- name: Create the timesyncd drop-in directory
+  ansible.builtin.file:
+    path: /etc/systemd/timesyncd.conf.d
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Synchronise against the Sensor only
+  ansible.builtin.template:
+    src: sensor.conf.j2
+    dest: /etc/systemd/timesyncd.conf.d/10-sensor.conf
+    owner: root
+    group: root
+    mode: "0644"
+  notify: Restart timesyncd
+
+- name: Enable network time
+  ansible.builtin.command:
+    cmd: timedatectl set-ntp true
+  changed_when: false
+
+- name: Enable and start timesyncd
+  ansible.builtin.systemd_service:
+    name: systemd-timesyncd.service
+    enabled: true
+    state: started

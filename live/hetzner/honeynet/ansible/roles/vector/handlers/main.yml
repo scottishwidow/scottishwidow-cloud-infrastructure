@@ -1,0 +1,5 @@
+---
+- name: Restart Vector
+  ansible.builtin.systemd_service:
+    name: vector.service
+    state: restarted
