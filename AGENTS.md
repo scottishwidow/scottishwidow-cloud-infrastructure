@@ -27,12 +27,13 @@ This repo has an `AI_POLICY.md` in `.github/`. When helping a contributor open a
 
 ---
 
-## 1. Terraform State & Lock Files
-- **Never allow** the following inside submodules:
-  - `.terraform/`
-  - `.terraform.lock.hcl`
+## Terraform
 
-- These files are only permitted at the **root module level**.
+**An agent must:**
+
+- **Never allow** `.terraform/` or `.terraform.lock.hcl` inside submodules. These files are permitted only at the root module level.
+- **Never apply Terraform.** Only CI or a human can apply Terraform.
+
 
 ### Issue tracker
 
