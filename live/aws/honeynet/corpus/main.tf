@@ -66,7 +66,7 @@ module "sensor_writer_role" {
   use_name_prefix = false
 
   trust_policy_permissions = {
-    RolesAnywhereFromSensorAddress = {
+    RolesAnywhereFromSensorTrustAnchor = {
       actions = [
         "sts:AssumeRole",
         "sts:TagSession",
@@ -76,23 +76,27 @@ module "sensor_writer_role" {
         type        = "Service"
         identifiers = ["rolesanywhere.amazonaws.com"]
       }]
-      condition = [
-        {
-          test     = "ArnEquals"
-          variable = "aws:SourceArn"
-          values   = [module.sensor_roles_anywhere.trust_anchor_arn]
-        },
-        {
-          test     = "IpAddress"
-          variable = "aws:SourceIp"
-          values   = ["${data.hcloud_primary_ip.sensor.ip_address}/32"]
-        },
-      ]
+      condition = [{
+        test     = "ArnEquals"
+        variable = "aws:SourceArn"
+        values   = [module.sensor_roles_anywhere.trust_anchor_arn]
+      }]
     }
   }
 
   create_inline_policy = true
   inline_policy_permissions = {
+    # Roles Anywhere omits aws:SourceIp when it assumes the role, so the address limit cannot live in the trust policy.
+    DenyOutsideSensorAddress = {
+      effect    = "Deny"
+      actions   = ["s3:*"]
+      resources = ["*"]
+      condition = [{
+        test     = "NotIpAddress"
+        variable = "aws:SourceIp"
+        values   = ["${data.hcloud_primary_ip.sensor.ip_address}/32"]
+      }]
+    }
     CorpusWriteOnly = {
       actions = [
         "s3:PutObject",

@@ -1118,6 +1118,8 @@
     verify_corpus_delivery_retries: 42
     verify_corpus_delivery_delay: 10
     verify_sensor_credentials: "{{ verify_sensor_session.stdout | default('{}', true) | from_json }}"
+    verify_probe_key: verify/sensor-credential/{{ inventory_hostname }}-{{ verify_corpus_probe_epoch.stdout }}
+    verify_workstation_probe_key: "{{ verify_probe_key }}-workstation"
 
   tasks:
     - name: Read the input chain of the Sensor
@@ -1160,35 +1162,68 @@
       changed_when: false
       check_mode: false
 
-    - name: Write, read, list and delete in the Corpus with the Sensor session
+    - name: Write, read, list and delete in the Corpus with the Sensor session from the Sensor
       ansible.builtin.command:
-        argv: "{{ ['env', '-u', 'AWS_PROFILE', '-u', 'AWS_DEFAULT_PROFILE', 'aws', '--region', corpus_region, 's3api'] + item.argv }}"
-      environment:
-        AWS_ACCESS_KEY_ID: "{{ verify_sensor_credentials.AccessKeyId }}"
-        AWS_SECRET_ACCESS_KEY: "{{ verify_sensor_credentials.SecretAccessKey }}"
-        AWS_SESSION_TOKEN: "{{ verify_sensor_credentials.SessionToken }}"
-      vars:
-        verify_probe_key: verify/sensor-credential/{{ inventory_hostname }}-{{ verify_corpus_probe_epoch.stdout }}
+        argv: >-
+          {{ ['curl', '--silent', '--show-error', '--fail-with-body', '--config', '-',
+              '--request', item.method, '--write-out', '%header{x-amz-version-id}']
+             + (['--data-binary', ''] if item.method == 'PUT' else [])
+             + ['https://' ~ corpus_bucket_name ~ '.s3.' ~ corpus_region ~ '.amazonaws.com/' ~ item.path] }}
+        stdin: |
+          aws-sigv4 = "aws:amz:{{ corpus_region }}:s3"
+          user = "{{ verify_sensor_credentials.AccessKeyId }}:{{ verify_sensor_credentials.SecretAccessKey }}"
+          header = "x-amz-security-token: {{ verify_sensor_credentials.SessionToken }}"
       loop:
         - action: write
-          argv: [put-object, --bucket, "{{ corpus_bucket_name }}", --key, "{{ verify_probe_key }}"]
+          method: PUT
+          path: "{{ verify_probe_key }}"
         - action: read
-          argv: [get-object, --bucket, "{{ corpus_bucket_name }}", --key, "{{ verify_probe_key }}", /dev/null]
+          method: GET
+          path: "{{ verify_probe_key }}"
         - action: list
-          argv: [list-objects-v2, --bucket, "{{ corpus_bucket_name }}", --max-items, "1"]
+          method: GET
+          path: "?list-type=2&max-keys=1"
         - action: delete
-          argv: [delete-object, --bucket, "{{ corpus_bucket_name }}", --key, "{{ verify_probe_key }}"]
+          method: DELETE
+          path: "{{ verify_probe_key }}"
       loop_control:
         label: "{{ item.action }}"
-      delegate_to: localhost
-      become: false
       register: verify_sensor_session_actions
       changed_when: false
       failed_when: false
       when: verify_sensor_session.rc == 0
       no_log: true
 
-    - name: Remove the probe object with the Operator profile
+    - name: Write to the Corpus with the Sensor session from the workstation
+      ansible.builtin.command:
+        argv:
+          - env
+          - -u
+          - AWS_PROFILE
+          - -u
+          - AWS_DEFAULT_PROFILE
+          - aws
+          - --region
+          - "{{ corpus_region }}"
+          - s3api
+          - put-object
+          - --bucket
+          - "{{ corpus_bucket_name }}"
+          - --key
+          - "{{ verify_workstation_probe_key }}"
+      environment:
+        AWS_ACCESS_KEY_ID: "{{ verify_sensor_credentials.AccessKeyId }}"
+        AWS_SECRET_ACCESS_KEY: "{{ verify_sensor_credentials.SecretAccessKey }}"
+        AWS_SESSION_TOKEN: "{{ verify_sensor_credentials.SessionToken }}"
+      delegate_to: localhost
+      become: false
+      register: verify_workstation_write
+      changed_when: false
+      failed_when: false
+      when: verify_sensor_session.rc == 0
+      no_log: true
+
+    - name: Remove the probe objects with the Operator profile
       ansible.builtin.command:
         argv:
           - aws
@@ -1199,18 +1234,23 @@
           - --bucket
           - "{{ corpus_bucket_name }}"
           - --key
-          - "{{ verify_probe_write.item.argv[4] }}"
+          - "{{ item.key }}"
           - --version-id
-          - "{{ (verify_probe_write.stdout | from_json).VersionId }}"
+          - "{{ item.version_id }}"
       vars:
-        verify_probe_write: "{{ verify_sensor_session_actions.results | selectattr('item.action', 'equalto', 'write') | first }}"
+        verify_sensor_write: "{{ verify_sensor_session_actions.results | default([]) | selectattr('item.action', 'equalto', 'write') | first | default({}) }}"
+        verify_probe_writes: >-
+          {{ ([{'key': verify_probe_key, 'version_id': verify_sensor_write.stdout | trim}]
+              if verify_sensor_write.rc | default(1) == 0 else [])
+             + ([{'key': verify_workstation_probe_key, 'version_id': (verify_workstation_write.stdout | from_json).VersionId}]
+              if verify_workstation_write.rc | default(1) == 0 else []) }}
+      loop: "{{ verify_probe_writes }}"
+      loop_control:
+        label: "{{ item.key }}"
       delegate_to: localhost
       become: false
       changed_when: true
       failed_when: false
-      when: >-
-        verify_sensor_session_actions.results | default([])
-        | selectattr('item.action', 'equalto', 'write') | selectattr('rc', 'defined') | selectattr('rc', 'equalto', 0) | list | length > 0
 
     - name: Request a Corpus session from the workstation address with a test certificate
       delegate_to: localhost
@@ -1421,7 +1461,7 @@
       when: verify_corpus_canary_event.stdout | default('') | length > 0
       ignore_errors: true
 
-    - name: Require Honeynet-only collector and time ports, a write-only Sensor session, a refused workstation session, a valid certificate and the canary in the Corpus
+    - name: Require Honeynet-only collector and time ports, a write-only Sensor session usable only from the Sensor, a refused workstation session, a valid certificate and the canary in the Corpus
       vars:
         verify_port_rules: >-
           {{ verify_input_chain.stdout_lines | map('trim')
@@ -1440,7 +1480,9 @@
           - verify_session_write.rc | default(1) == 0
           - verify_session_denied | length == 3
           - verify_session_denied | map(attribute='rc', default=0) | select('equalto', 0) | list == []
-          - verify_session_denied | map(attribute='stderr', default='') | reject('search', 'AccessDenied') | list == []
+          - verify_session_denied | map(attribute='stdout', default='') | reject('search', '<Code>AccessDenied</Code>') | list == []
+          - verify_workstation_write.rc | default(0) != 0
+          - "'AccessDenied' in verify_workstation_write.stderr | default('')"
           - verify_workstation_session.rc | default(0) != 0
           - "'AccessDenied' in verify_workstation_session.stderr | default('')"
           - verify_corpus_canary_event.stdout | default('') | length > 0
@@ -1449,8 +1491,9 @@
           collector and time port rules={{ verify_port_rules }};
           certificate={{ verify_certificate_validity.stdout_lines | default([]) }}, expected valid for {{ corpus_credential_minimum_validity_days }} more days;
           Sensor session rc={{ verify_sensor_session.rc | default('') }} {{ verify_sensor_session.stderr | default('') | trim }};
-          Sensor session write rc={{ verify_session_write.rc | default('not run') }} {{ verify_session_write.stderr | default('') | trim }};
-          Sensor session read, list and delete={{ verify_session_denied | map(attribute='stderr', default='not run') | map('trim') | list }};
+          Sensor session write rc={{ verify_session_write.rc | default('not run') }} {{ verify_session_write.stdout | default('') | trim }} {{ verify_session_write.stderr | default('') | trim }};
+          Sensor session read, list and delete={{ verify_session_denied | map(attribute='stdout', default='not run') | map('trim') | list }};
+          Sensor session write from the workstation rc={{ verify_workstation_write.rc | default('not run') }} {{ verify_workstation_write.stderr | default('') | trim }};
           workstation session rc={{ verify_workstation_session.rc | default('not run') }} {{ verify_workstation_session.stderr | default('') | trim }};
           canary EVE event={{ verify_corpus_canary_event.stdout | default('none', true) }};
           canary object={{ verify_corpus_canary_object.stdout | default('none', true) }} {{ verify_corpus_canary_object.stderr | default('') | trim }}
