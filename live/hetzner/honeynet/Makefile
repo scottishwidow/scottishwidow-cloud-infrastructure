@@ -79,7 +79,7 @@ apply-%:
 
 destroy-%:
 	$(call require_env)
-	$(TERRAFORM) -chdir=$(call stack_dir,$*) destroy $(TF_ARGS)
+	$(TERRAFORM) -chdir=$(call stack_dir,$*) destroy -refresh=false $(TF_ARGS)
 
 stack_dir   = $(or $(DIR_$(1)),$(error Unknown stack '$(1)'. Allowed: $(ALL_STACKS)))
 require_env = $(foreach var,$(REQUIRED_ENV),$(if $($(var)),,$(error $(var) is not set)))
