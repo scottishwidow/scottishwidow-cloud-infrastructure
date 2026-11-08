@@ -49,6 +49,12 @@ variable "proxy_port" {
   default     = 3128
 }
 
+variable "collector_port" {
+  description = "TCP port of the Vector collector on the Sensor. Vector on every Honeypot sends Session Evidence to it. The Makefile sets it for the sensor and honeypots roots"
+  type        = number
+  default     = 6000
+}
+
 variable "honeypot_count" {
   description = "Number of identical Honeypots. They are named honeypot-1 to honeypot-N"
   type        = number

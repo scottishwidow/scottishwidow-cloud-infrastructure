@@ -26,6 +26,8 @@ export TF_VAR_honeypot_1_private_ip := 10.20.0.11
 
 export TF_VAR_proxy_port := 3128
 
+export TF_VAR_collector_port := 6000
+
 export TF_VAR_honeypot_port_redirects := {"21":2121,"22":2222,"23":2223,"80":8080}
 
 .NOTPARALLEL:
@@ -79,7 +81,7 @@ apply-%:
 
 destroy-%:
 	$(call require_env)
-	$(TERRAFORM) -chdir=$(call stack_dir,$*) destroy $(TF_ARGS)
+	$(TERRAFORM) -chdir=$(call stack_dir,$*) destroy -refresh=false $(TF_ARGS)
 
 stack_dir   = $(or $(DIR_$(1)),$(error Unknown stack '$(1)'. Allowed: $(ALL_STACKS)))
 require_env = $(foreach var,$(REQUIRED_ENV),$(if $($(var)),,$(error $(var) is not set)))

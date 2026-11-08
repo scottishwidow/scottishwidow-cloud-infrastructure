@@ -3,6 +3,7 @@ vector_apt_uri: https://apt.vector.dev/
 vector_apt_suite: stable
 vector_apt_component: vector-0
 
+vector_config_template: sensor.yaml.j2
 vector_config_path: /etc/vector/vector.yaml
 vector_data_directory: /var/lib/vector
 
@@ -15,3 +16,14 @@ vector_eve_logs:
   - /var/log/suricata/eve.json.1
 
 vector_corpus_buffer_max_bytes: 5368709120
+
+vector_session_evidence_sources:
+  - cowrie
+  - opencanary
+vector_session_evidence_buffer_max_bytes: 2147483648
+
+vector_cowrie_logs:
+  - "{{ cowrie_dir }}/var/log/cowrie/cowrie.json*"
+vector_opencanary_logs:
+  - "{{ opencanary_dir }}/var/opencanary.log"
+vector_sensor_buffer_max_bytes: 1073741824

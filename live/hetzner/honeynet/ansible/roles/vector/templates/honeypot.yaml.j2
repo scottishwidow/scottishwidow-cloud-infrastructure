@@ -1,0 +1,59 @@
+data_dir: {{ vector_data_directory }}
+
+sources:
+  cowrie_log:
+    type: file
+    include: {{ vector_cowrie_logs | to_json }}
+    read_from: beginning
+
+  opencanary_log:
+    type: file
+    include: {{ vector_opencanary_logs | to_json }}
+    read_from: beginning
+
+transforms:
+  # The record is kept verbatim in .message. source and host name the Corpus
+  # partition, and the Vector timestamp becomes the event time for the dt partition.
+  cowrie_record:
+    type: remap
+    inputs:
+      - cowrie_log
+    source: |
+      .source = "cowrie"
+      .host = {{ inventory_hostname | to_json }}
+      record, err = parse_json(.message)
+      if err == null {
+        event_time, err = parse_timestamp(record.timestamp, format: "%+")
+        if err == null {
+          .timestamp = event_time
+        }
+      }
+
+  opencanary_record:
+    type: remap
+    inputs:
+      - opencanary_log
+    source: |
+      .source = "opencanary"
+      .host = {{ inventory_hostname | to_json }}
+      record, err = parse_json(.message)
+      if err == null {
+        event_time, err = parse_timestamp(record.utc_time, format: "%Y-%m-%d %H:%M:%S%.f", timezone: "UTC")
+        if err == null {
+          .timestamp = event_time
+        }
+      }
+
+sinks:
+  sensor:
+    type: vector
+    inputs:
+      - cowrie_record
+      - opencanary_record
+    address: http://{{ sensor_private_ip }}:{{ collector_port }}
+    acknowledgements:
+      enabled: true
+    buffer:
+      type: disk
+      max_size: {{ vector_sensor_buffer_max_bytes }}
+      when_full: block

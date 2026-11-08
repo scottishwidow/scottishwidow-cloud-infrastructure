@@ -77,7 +77,7 @@ variable "proxy_port" {
 }
 
 variable "collector_port" {
-  description = "TCP port of the Vector collector on the Sensor. The Honeypots send Session Evidence to it. Only the Honeynet network can reach it"
+  description = "TCP port of the Vector collector on the Sensor. The Honeypots send Session Evidence to it. The Makefile sets it for the sensor and honeypots roots. Only the Honeynet network can reach it"
   type        = number
   default     = 6000
 }

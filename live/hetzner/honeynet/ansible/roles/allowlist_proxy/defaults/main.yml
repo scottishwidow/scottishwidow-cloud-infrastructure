@@ -11,3 +11,5 @@ allowlist_proxy_domains:
   - .mirror.hetzner.com
   - .docker.io
   - .docker.com
+  - apt.vector.dev
+  - keys.datadoghq.com

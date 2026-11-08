@@ -592,6 +592,11 @@
     verify_workstation_ip: "{{ hostvars['sensor'].verify_workstation_ip }}"
     verify_allowlisted_url: http://archive.ubuntu.com/ubuntu/dists/noble/Release
     verify_denied_url: http://example.com/
+    verify_exact_host_tunnels:
+      - { host: apt.vector.dev, connect: "200" }
+      - { host: keys.datadoghq.com, connect: "200" }
+      - { host: vector.dev, connect: "403" }
+      - { host: datadoghq.com, connect: "403" }
 
   tasks:
     - name: Read the sessions Cowrie recorded
@@ -662,6 +667,27 @@
       changed_when: false
       failed_when: false
 
+    - name: Open an HTTPS tunnel through the proxy to the Vector apt hosts and to their parent domains
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --silent
+          - --max-time
+          - "20"
+          - --output
+          - /dev/null
+          - --write-out
+          - "%{http_connect}"
+          - --proxy
+          - "{{ honeynet_proxy_url }}"
+          - https://{{ item.host }}/
+      loop: "{{ verify_exact_host_tunnels }}"
+      loop_control:
+        label: "{{ item.host }}"
+      register: verify_proxy_tunnels
+      changed_when: false
+      failed_when: false
+
     - name: Require the attacker address and the download in the Cowrie log and an allowlist that refuses
       vars:
         verify_cowrie_session: "{{ verify_cowrie_sessions.stdout | default('{}', true) | from_json }}"
@@ -674,13 +700,16 @@
           - verify_cowrie_hostname_download_url in verify_cowrie_session.downloads | default([])
           - verify_proxy_allowed.stdout == '200'
           - verify_proxy_denied.stdout == '403'
+          - verify_proxy_tunnels.results | map(attribute='stdout') | list == verify_exact_host_tunnels | map(attribute='connect') | list
         fail_msg: >-
           Cowrie source addresses={{ verify_cowrie_session.source_ips | default('none') }};
           Cowrie commands={{ verify_cowrie_session.commands | default('none') }};
           Cowrie downloads={{ verify_cowrie_session.downloads | default('none') }};
           Cowrie failed downloads={{ verify_cowrie_session.failed_downloads | default('none') }};
           allowlisted domain={{ verify_proxy_allowed.stdout | default('') }} {{ verify_proxy_allowed.stderr | default('') | trim }};
-          domain not on the allowlist={{ verify_proxy_denied.stdout | default('') }} {{ verify_proxy_denied.stderr | default('') | trim }}
+          domain not on the allowlist={{ verify_proxy_denied.stdout | default('') }} {{ verify_proxy_denied.stderr | default('') | trim }};
+          tunnels={{ verify_proxy_tunnels.results | map(attribute='item.host') | zip(verify_proxy_tunnels.results | map(attribute='stdout')) | list }},
+          expected {{ verify_exact_host_tunnels | map(attribute='host') | zip(verify_exact_host_tunnels | map(attribute='connect')) | list }}
 
 - name: Verify the OpenCanary records from each Honeypot
   hosts: honeypots
@@ -1520,6 +1549,251 @@
       ansible.builtin.assert:
         that: verify_timesync.stdout_lines | default([]) == [sensor_private_ip, 'yes']
         fail_msg: "time server and synchronised={{ verify_timesync.stdout_lines | default([]) }}, expected {{ [sensor_private_ip, 'yes'] }}"
+
+- name: Verify the path from each Honeypot through the Sensor to the Corpus
+  hosts: honeypots
+  gather_facts: false
+
+  vars_files:
+    - ../roles/corpus_credential/defaults/main.yml
+
+  vars:
+    verify_sensor: "{{ groups['sensors'] | first }}"
+    verify_corpus_bucket: "{{ hostvars[verify_sensor].corpus_bucket_name }}"
+    verify_corpus_region: "{{ hostvars[verify_sensor].corpus_region }}"
+    verify_collector_address: http://{{ sensor_private_ip }}:{{ collector_port }}
+    verify_cowrie_log: "{{ cowrie_dir }}/var/log/cowrie/cowrie.json"
+    verify_opencanary_log: "{{ opencanary_dir }}/var/opencanary.log"
+    verify_maximum_clock_skew_seconds: 1
+    verify_corpus_delivery_retries: 42
+    verify_corpus_delivery_delay: 10
+
+  tasks:
+    - name: Measure the clock offset against the Sensor with an SNTP query
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, socket, struct, sys, time
+            ntp_to_unix_seconds = 2208988800
+            request = b"\x23" + 47 * b"\0"
+            with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+                sock.settimeout(5)
+                sent = time.time()
+                sock.sendto(request, (sys.argv[1], 123))
+                reply, _ = sock.recvfrom(48)
+                received = time.time()
+            def ntp_time(offset):
+                seconds, fraction = struct.unpack("!II", reply[offset:offset + 8])
+                return seconds - ntp_to_unix_seconds + fraction / 2**32
+            server_received, server_sent = ntp_time(32), ntp_time(40)
+            print(json.dumps({
+                "stratum": reply[1],
+                "offset": ((server_received - sent) + (server_sent - received)) / 2,
+            }))
+          - "{{ sensor_private_ip }}"
+      register: verify_clock_offset
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read the sinks in the Vector config of the Honeypot and the Sensor
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, sys, yaml
+            with open(sys.argv[1]) as config_file:
+                sinks = yaml.safe_load(config_file).get("sinks", {})
+            print(json.dumps({
+                name: {
+                    "type": sink.get("type"),
+                    "address": sink.get("address"),
+                    "buffer": sink.get("buffer", {}).get("type"),
+                    "auth": "auth" in sink,
+                }
+                for name, sink in sinks.items()
+            }))
+          - /etc/vector/vector.yaml
+      delegate_to: "{{ item }}"
+      loop:
+        - "{{ inventory_hostname }}"
+        - "{{ verify_sensor }}"
+      register: verify_vector_sinks
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Look for a Corpus credential on the Honeypot
+      ansible.builtin.shell:
+        cmd: >-
+          ls -d {{ corpus_credential_directory }} {{ corpus_credential_signing_helper_path }} ~vector/.aws 2>/dev/null;
+          grep -rlE 'aws_access_key_id|credential_process' /etc/vector /root ~vector 2>/dev/null
+      register: verify_honeypot_credentials
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
+    - name: Read the peers of the connections that Vector holds
+      ansible.builtin.shell:
+        cmd: >-
+          ss --tcp --numeric --processes --no-header state established
+          | awk '/users:\(\("vector",/ { print $4 }'
+      register: verify_vector_peers
+      changed_when: false
+      check_mode: false
+
+    - name: Read the Honeypot time before the Session Evidence probes
+      ansible.builtin.shell:
+        cmd: date -u +%Y-%m-%dT%H:%M:%S && date +%s
+      register: verify_session_start
+      changed_when: false
+      check_mode: false
+
+    - name: Keep the start of the Session Evidence probes
+      ansible.builtin.set_fact:
+        verify_session_since: "{{ verify_session_start.stdout_lines[0] }}"
+        verify_session_nonce: session-evidence-{{ verify_session_start.stdout_lines[1] }}
+
+    - name: Run a command with the nonce in a Cowrie session on port 23
+      ansible.builtin.command:
+        argv:
+          - python3
+          - "{{ playbook_dir }}/files/cowrie_telnet_probe.py"
+          - --host
+          - "{{ hostvars[verify_sensor].ansible_host }}"
+          - --port
+          - "23"
+          - --username
+          - "{{ verify_cowrie_username }}"
+          - --password
+          - "{{ verify_cowrie_password }}"
+          - --command
+          - echo {{ verify_session_nonce }}
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      failed_when: false
+
+    - name: Try an OpenCanary FTP login with the nonce as the user name on port 21
+      ansible.builtin.command:
+        argv:
+          - curl
+          - --silent
+          - --max-time
+          - "20"
+          - --user
+          - "{{ verify_session_nonce }}:{{ verify_opencanary_password }}"
+          - --output
+          - /dev/null
+          - ftp://{{ hostvars[verify_sensor].ansible_host }}/
+      delegate_to: localhost
+      become: false
+      changed_when: false
+      failed_when: false
+
+    - name: Read the Session Evidence records of the nonce on the Honeypot
+      ansible.builtin.command:
+        argv:
+          - python3
+          - -c
+          - |
+            import json, sys
+            cowrie_log, opencanary_log, nonce = sys.argv[1:4]
+            found = {}
+            def scan(path, source, time_field, matches):
+                with open(path) as log:
+                    for raw in log:
+                        line = raw.rstrip("\n")
+                        try:
+                            record = json.loads(line)
+                        except ValueError:
+                            continue
+                        if matches(record):
+                            found[source] = {"source": source, "line": line, "dt": record[time_field][:10]}
+                            return
+            scan(cowrie_log, "cowrie", "timestamp",
+                 lambda record: record.get("eventid") == "cowrie.command.input" and nonce in record.get("input", ""))
+            scan(opencanary_log, "opencanary", "utc_time",
+                 lambda record: (record.get("logdata") or {}).get("USERNAME") == nonce)
+            print(json.dumps(sorted(found.values(), key=lambda record: record["source"])))
+          - "{{ verify_cowrie_log }}"
+          - "{{ verify_opencanary_log }}"
+          - "{{ verify_session_nonce }}"
+      register: verify_session_records
+      changed_when: false
+      check_mode: false
+      retries: 12
+      delay: 5
+      until: verify_session_records.stdout | default('[]', true) | from_json | length == 2
+      ignore_errors: true
+
+    - name: Find each Session Evidence record in the Corpus under the partition of its source and Honeypot
+      ansible.builtin.shell:
+        cmd: |
+          aws s3api list-objects-v2 --region "$VERIFY_REGION" --bucket "$VERIFY_BUCKET" --prefix "$VERIFY_PREFIX" \
+            --query 'Contents[].[LastModified, Key]' --output text \
+          | awk -v since="$VERIFY_SINCE" '$1 >= since { print $2 }' \
+          | while read -r key; do
+              if aws s3 cp --region "$VERIFY_REGION" --quiet "s3://$VERIFY_BUCKET/$key" - < /dev/null \
+                | gunzip -c | grep -qxF -e "$VERIFY_RECORD_LINE"; then
+                echo "$key"
+                break
+              fi
+            done \
+          | grep .
+      environment:
+        VERIFY_REGION: "{{ verify_corpus_region }}"
+        VERIFY_BUCKET: "{{ verify_corpus_bucket }}"
+        VERIFY_PREFIX: source={{ item.source }}/host={{ inventory_hostname }}/dt={{ item.dt }}/
+        VERIFY_SINCE: "{{ verify_session_since }}"
+        VERIFY_RECORD_LINE: "{{ item.line }}"
+      loop: "{{ verify_session_records.stdout | default('[]', true) | from_json }}"
+      loop_control:
+        label: "{{ item.source }}"
+      delegate_to: localhost
+      become: false
+      register: verify_session_objects
+      changed_when: false
+      retries: "{{ verify_corpus_delivery_retries }}"
+      delay: "{{ verify_corpus_delivery_delay }}"
+      until: verify_session_objects.rc == 0
+      ignore_errors: true
+
+    - name: Require clock skew below one second, a Honeypot without a credential that sends only to the Sensor, disk buffers on both hops and the Session Evidence in the Corpus
+      vars:
+        verify_offset: "{{ verify_clock_offset.stdout | default('{}', true) | from_json }}"
+        verify_honeypot_sinks: "{{ (verify_vector_sinks.results[0].stdout | default('{}', true) | from_json).values() | list }}"
+        verify_sensor_sinks: "{{ (verify_vector_sinks.results[1].stdout | default('{}', true) | from_json).values() | list }}"
+        verify_found_sources: "{{ verify_session_objects.results | default([]) | selectattr('rc', 'equalto', 0) | map(attribute='item.source') | list }}"
+      ansible.builtin.assert:
+        that:
+          - verify_clock_offset.rc == 0
+          - verify_offset.stratum | default(0) | int in range(1, 16)
+          - verify_offset.offset | default(99) | float | abs < verify_maximum_clock_skew_seconds
+          - verify_vector_sinks.results | map(attribute='rc') | list == [0, 0]
+          - verify_honeypot_sinks | length > 0
+          - verify_honeypot_sinks | rejectattr('type', 'equalto', 'vector') | list == []
+          - verify_honeypot_sinks | rejectattr('address', 'equalto', verify_collector_address) | list == []
+          - verify_honeypot_sinks | selectattr('auth') | list == []
+          - verify_honeypot_sinks | rejectattr('buffer', 'equalto', 'disk') | list == []
+          - verify_sensor_sinks | length > 0
+          - verify_sensor_sinks | rejectattr('buffer', 'equalto', 'disk') | list == []
+          - verify_honeypot_credentials.stdout | trim == ''
+          - verify_vector_peers.stdout_lines | reject('equalto', sensor_private_ip ~ ':' ~ collector_port) | list == []
+          - verify_found_sources | sort == ['cowrie', 'opencanary']
+        fail_msg: >-
+          clock offset against the Sensor={{ verify_clock_offset.stdout | default('') }} {{ verify_clock_offset.stderr | default('') | trim }},
+          expected stratum 1 to 15 and below {{ verify_maximum_clock_skew_seconds }} s;
+          Honeypot Vector sinks={{ verify_vector_sinks.results[0].stdout | default('') }} {{ verify_vector_sinks.results[0].stderr | default('') | trim }},
+          expected only vector sinks to {{ verify_collector_address }} with a disk buffer and no auth;
+          Sensor Vector sinks={{ verify_vector_sinks.results[1].stdout | default('') }} {{ verify_vector_sinks.results[1].stderr | default('') | trim }};
+          credential files on the Honeypot={{ verify_honeypot_credentials.stdout_lines }};
+          Vector peers={{ verify_vector_peers.stdout_lines }};
+          Session Evidence records on the Honeypot={{ verify_session_records.stdout | default('none', true) }};
+          found in the Corpus={{ verify_found_sources }}
 
 - name: Verify that the Sensor fails open with Suricata stopped in IPS mode
   hosts: sensors

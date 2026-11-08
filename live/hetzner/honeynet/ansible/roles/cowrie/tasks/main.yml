@@ -7,19 +7,26 @@
     group: root
     mode: "0755"
 
+- name: Create the group that may read the Cowrie log
+  ansible.builtin.group:
+    name: "{{ cowrie_log_reader_group }}"
+    system: true
+
 - name: Create the Cowrie session directories
   ansible.builtin.file:
-    path: "{{ cowrie_dir }}/{{ item }}"
+    path: "{{ cowrie_dir }}/{{ item.path }}"
     state: directory
     owner: "{{ cowrie_uid }}"
-    group: "{{ cowrie_uid }}"
+    group: "{{ item.group }}"
     mode: "0750"
   loop:
-    - var
-    - var/log/cowrie
-    - var/lib/cowrie
-    - var/lib/cowrie/tty
-    - var/lib/cowrie/downloads
+    - { path: var, group: "{{ cowrie_log_reader_group }}" }
+    - { path: var/log/cowrie, group: "{{ cowrie_log_reader_group }}" }
+    - { path: var/lib/cowrie, group: "{{ cowrie_uid }}" }
+    - { path: var/lib/cowrie/tty, group: "{{ cowrie_uid }}" }
+    - { path: var/lib/cowrie/downloads, group: "{{ cowrie_uid }}" }
+  loop_control:
+    label: "{{ item.path }}"
 
 - name: Write the Cowrie config
   ansible.builtin.template:
