@@ -25,7 +25,7 @@ suricata_proxy_pass_sid: 1000003
 suricata_pcap_file_size_limit: 100 MiB
 suricata_pcap_max_files: 20
 
-suricata_log_retention_days: 14
+suricata_log_retention_days: 3
 
 suricata_update_schedule: daily
 suricata_update_randomized_delay: 1h
