@@ -49,5 +49,5 @@ A search for hostile activity that starts from a hypothesis and is written as SQ
 _Avoid_: Investigation, triage, analysis, threat hunt
 
 **Hunt Host**:
-The host that queries the Corpus. It is not a Honeynet host, it holds a credential, and it is stopped when no Hunt runs.
+The host that queries the Corpus. It is not a Honeynet host, it holds a credential, and it is destroyed with the Honeynet.
 _Avoid_: Analysis box, jump host, workstation
