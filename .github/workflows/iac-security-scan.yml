@@ -34,6 +34,14 @@ jobs:
           output: 'trivy-results.sarif'
           limit-severities-for-sarif: true
           version: 'v0.76.2'
+          cache: 'false'
+
+      - name: Drop duplicate results from modules with several callers
+        if: always() && hashFiles('trivy-results.sarif') != ''
+        run: |
+          jq '.runs[].results |= unique_by([.ruleId, .locations, .message.text])' \
+            trivy-results.sarif > trivy-results.dedup.sarif
+          mv trivy-results.dedup.sarif trivy-results.sarif
 
       - name: Upload SARIF to code scanning
         if: always() && hashFiles('trivy-results.sarif') != ''

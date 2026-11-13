@@ -15,6 +15,6 @@ misconfiguration:
   scanners:
     - terraform
     - ansible
-  checks-bundle-repository: ghcr.io/aquasecurity/trivy-checks:1
+  checks-bundle-repository: ghcr.io/aquasecurity/trivy-checks:2.3.0@sha256:3eae4436560566e77115396d0221a64e0cd86d94a3b45203f8ae3f9a85c027cd
   terraform:
-    exclude-downloaded-modules: true
+    exclude-downloaded-modules: false

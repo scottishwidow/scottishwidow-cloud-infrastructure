@@ -15,6 +15,15 @@
       ],
       "depNameTemplate": "aquasecurity/trivy",
       "datasourceTemplate": "github-releases"
+    },
+    {
+      "customType": "regex",
+      "description": "Trivy checks bundle pinned in trivy.yaml",
+      "managerFilePatterns": ["/^trivy\\.yaml$/"],
+      "matchStrings": [
+        "checks-bundle-repository: (?<depName>ghcr\\.io/aquasecurity/trivy-checks):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
+      ],
+      "datasourceTemplate": "docker"
     }
   ]
 }
