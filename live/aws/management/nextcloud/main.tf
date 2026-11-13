@@ -8,6 +8,7 @@ module "next_cloud" {
   instance_type               = var.next_cloud_instance_type
   subnet_id                   = data.aws_subnet.public_zone_1.id
   vpc_security_group_ids      = [module.next_cloud_sg.security_group_id]
+  create_security_group       = false
   associate_public_ip_address = true
 
   ignore_ami_changes = true
