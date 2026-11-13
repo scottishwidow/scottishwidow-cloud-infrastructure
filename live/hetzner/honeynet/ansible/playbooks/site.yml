@@ -30,3 +30,8 @@
     - time_client
     - cowrie
     - opencanary
+    - role: vector
+      vars:
+        vector_config_template: honeypot.yaml.j2
+        vector_reader_groups:
+          - "{{ cowrie_log_reader_group }}"

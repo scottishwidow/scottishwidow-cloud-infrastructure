@@ -15,6 +15,7 @@ output "ansible_inventory" {
         sensor_private_ip         = var.sensor_private_ip
         honeynet_network_ip_range = data.hcloud_network.honeynet.ip_range
         honeynet_proxy_url        = "http://${var.sensor_private_ip}:${var.proxy_port}"
+        collector_port            = var.collector_port
         honeypot_port_redirects   = var.honeypot_port_redirects
       }
     }

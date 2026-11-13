@@ -140,6 +140,24 @@ The order is fixed:
 
 To destroy `bootstrap` as well, first set `delete_protection = false` on the primary IP and apply. A recreate then gets a new address from Hetzner, and `corpus` must be applied after `bootstrap` to put that address in the trust policy. The `corpus` root cannot plan while no primary IP exists. See [ADR-0023](../../../docs/adr/0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md).
 
+### Full teardown
+
+A full teardown deletes the Corpus and all retained telemetry. This is not the normal procedure. [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md) keeps `corpus` and `bootstrap` across a teardown.
+
+The destroy order is the reverse of the apply order: `honeypots`, `sensor`, `network`, `corpus`, `bootstrap`.
+
+Do not use `make destroy` for a full teardown. It deletes `pki/`, and the `corpus` root reads `pki/ca.crt` at plan. Run each step in this order:
+
+1. Decide what to do with the Log Volume. To keep it, remove it from the `sensor` state. To delete it, set `delete_protection = false` and apply. See [Rules](#rules).
+2. `make destroy-honeypots`
+3. `make destroy-sensor`
+4. `make destroy-network`
+5. Set `force_destroy = true` on `module "corpus"` in `live/aws/honeynet/corpus/main.tf`, then run `make apply-corpus`. The bucket is versioned, and a destroy fails while it holds objects.
+6. `make destroy-corpus`. The `corpus` root reads `pki/ca.crt` and the Sensor primary IP, so `pki/` and `bootstrap` must still exist.
+7. `rm -rf pki`
+8. Set `delete_protection = false` on `hcloud_primary_ip.sensor` in `bootstrap/main.tf`, then run `make apply-bootstrap`.
+9. `make destroy-bootstrap`. This also deletes the Hetzner SSH key.
+
 To move an address that an older revision created in the `sensor` root, follow [the address move runbook](../../../docs/runbooks/honeynet-sensor-address-move.md).
 
 ## Operation

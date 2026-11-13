@@ -1,0 +1,69 @@
+{% macro corpus_sink(input, key_source, buffer_max_bytes) %}
+    type: aws_s3
+    inputs:
+      - {{ input }}
+    bucket: {{ corpus_bucket_name }}
+    region: {{ corpus_region }}
+    auth:
+      credentials_file: {{ corpus_credential_aws_credentials_path }}
+      profile: {{ corpus_credential_aws_profile }}
+    key_prefix: "source={{ key_source }}/host={% raw %}{{ host }}{% endraw %}/dt=%Y-%m-%d/"
+    timezone: UTC
+    filename_append_uuid: true
+    compression: gzip
+    encoding:
+      codec: text
+    framing:
+      method: newline_delimited
+    healthcheck:
+      enabled: false
+    acknowledgements:
+      enabled: true
+    buffer:
+      type: disk
+      max_size: {{ buffer_max_bytes }}
+      when_full: block
+{%- endmacro %}
+data_dir: {{ vector_data_directory }}
+
+sources:
+  suricata_eve:
+    type: file
+    include: {{ vector_eve_logs | to_json }}
+    read_from: beginning
+
+  session_evidence:
+    type: vector
+    address: {{ sensor_private_ip }}:{{ collector_port }}
+
+transforms:
+  suricata_event_time:
+    type: remap
+    inputs:
+      - suricata_eve
+    # The record is kept verbatim in .message. Only the Vector timestamp changes,
+    # so that the dt partition is the event date and not the ingest date.
+    source: |
+      eve, err = parse_json(.message)
+      if err == null {
+        event_time, err = parse_timestamp(eve.timestamp, format: "%Y-%m-%dT%H:%M:%S%.f%z")
+        if err == null {
+          .timestamp = event_time
+        }
+      }
+
+  # A Honeypot sets source and host itself. Only known values reach the key prefix.
+  session_evidence_known:
+    type: filter
+    inputs:
+      - session_evidence
+    condition: >-
+      includes({{ vector_session_evidence_sources | to_json }}, .source) &&
+      includes({{ groups['honeypots'] | to_json }}, .host)
+
+sinks:
+  corpus_suricata:
+{{ corpus_sink('suricata_event_time', 'suricata', vector_corpus_buffer_max_bytes) }}
+
+  corpus_session_evidence:
+{{ corpus_sink('session_evidence_known', '{{ source }}', vector_session_evidence_buffer_max_bytes) }}

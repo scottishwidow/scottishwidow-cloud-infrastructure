@@ -10,6 +10,8 @@ cowrie_hostname: "{{ honeypot_persona.hostname }}"
 
 cowrie_uid: 999
 
+cowrie_log_reader_group: session-evidence
+
 cowrie_container_honeyfs_dir: /cowrie/cowrie-git/honeyfs
 
 cowrie_honeyfs_files:

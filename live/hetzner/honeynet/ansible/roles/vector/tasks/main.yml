@@ -28,7 +28,7 @@
     cache_valid_time: 3600
     policy_rc_d: 101
 
-- name: Let Vector read the EVE log and the Sensor credential
+- name: Let Vector read the files its sources and sinks need
   ansible.builtin.user:
     name: vector
     groups: "{{ vector_reader_groups }}"
@@ -46,7 +46,7 @@
 
 - name: Write the Vector config
   ansible.builtin.template:
-    src: vector.yaml.j2
+    src: "{{ vector_config_template }}"
     dest: "{{ vector_config_path }}"
     owner: root
     group: vector

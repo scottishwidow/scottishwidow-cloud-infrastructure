@@ -26,6 +26,8 @@ export TF_VAR_honeypot_1_private_ip := 10.20.0.11
 
 export TF_VAR_proxy_port := 3128
 
+export TF_VAR_collector_port := 6000
+
 export TF_VAR_honeypot_port_redirects := {"21":2121,"22":2222,"23":2223,"80":8080}
 
 .NOTPARALLEL:
