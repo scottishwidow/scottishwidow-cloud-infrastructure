@@ -1,10 +1,8 @@
 # Security Policy
 
-Security Rules that agents **must** follow when working with this codebase.
+Security Rules that **must** be followed when working with this codebase.
 
 ## Supply-Chain Hygiene
-
-**An agent must:**
 
 - **Pin each dependency to an exact version when possible.** If you use a version constraint, it must allow patch updates only (for example `~1.2.3` in npm, `~> 1.2.3` in Terraform, `~=1.2.3` in Python). Do not use `^`, `>=`, `*`, `latest`, or constraints that allow minor or major updates.
 - **Commit lock files** (for example `package-lock.json`, `uv.lock`, `poetry.lock`, `Cargo.lock`, `go.sum`).
