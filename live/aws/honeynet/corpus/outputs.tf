@@ -38,6 +38,7 @@ output "ansible_inventory" {
         corpus_sensor_trust_anchor_arn = module.sensor_roles_anywhere.trust_anchor_arn
         corpus_sensor_profile_arn      = module.sensor_roles_anywhere.profile_arn
         corpus_sensor_role_arn         = module.sensor_writer_role.arn
+        corpus_credential_common_name  = var.sensor_certificate_common_name
       }
     }
   }

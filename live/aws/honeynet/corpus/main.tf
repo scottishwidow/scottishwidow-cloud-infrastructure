@@ -76,11 +76,18 @@ module "sensor_writer_role" {
         type        = "Service"
         identifiers = ["rolesanywhere.amazonaws.com"]
       }]
-      condition = [{
-        test     = "ArnEquals"
-        variable = "aws:SourceArn"
-        values   = [module.sensor_roles_anywhere.trust_anchor_arn]
-      }]
+      condition = [
+        {
+          test     = "ArnEquals"
+          variable = "aws:SourceArn"
+          values   = [module.sensor_roles_anywhere.trust_anchor_arn]
+        },
+        {
+          test     = "StringEquals"
+          variable = "aws:PrincipalTag/x509Subject/CN"
+          values   = [var.sensor_certificate_common_name]
+        },
+      ]
     }
   }
 

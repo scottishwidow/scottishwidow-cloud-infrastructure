@@ -58,3 +58,11 @@ what it creates.
   destroy order, and a direct destroy of it still deletes the telemetry.
 - The loss of the local `bootstrap` state file no longer costs the address,
   because nothing reads that state for it.
+
+## Amendment, 2026-11-13
+
+The address condition is in the writer role permission policy and not in the
+trust policy. See the amendment to
+[ADR-0019](./0019-the-sensor-holds-no-long-lived-aws-credential.md). The
+consequence that the trust policy changes in each cycle now applies to the
+permission policy.

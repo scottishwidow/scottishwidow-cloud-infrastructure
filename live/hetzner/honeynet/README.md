@@ -138,7 +138,7 @@ The order is fixed:
 
 `make destroy` removes the disposable roots in the reverse order, then deletes `pki/`. The next `make apply` generates a new CA. It does not remove `bootstrap`, so the Sensor keeps its address across a destroy and a new apply, and it does not remove `corpus`, so the Corpus keeps 13 months of telemetry. See [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md).
 
-To destroy `bootstrap` as well, first set `delete_protection = false` on the primary IP and apply. A recreate then gets a new address from Hetzner, and `corpus` must be applied after `bootstrap` to put that address in the trust policy. The `corpus` root cannot plan while no primary IP exists. See [ADR-0023](../../../docs/adr/0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md).
+To destroy `bootstrap` as well, first set `delete_protection = false` on the primary IP and apply. A recreate then gets a new address from Hetzner, and `corpus` must be applied after `bootstrap` to put that address in the writer role permission policy. The `corpus` root cannot plan while no primary IP exists. See [ADR-0023](../../../docs/adr/0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md).
 
 ### Full teardown
 
