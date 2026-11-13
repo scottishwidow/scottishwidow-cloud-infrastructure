@@ -50,3 +50,33 @@ public IPv4. There is no CRL. To revoke, disable the Roles Anywhere profile.
 - The CA generation step must come before the `corpus` apply in each provisioning.
 - If the Sensor public IPv4 changes, shipping stops. The address is a primary IP in
   the `bootstrap` root with `delete_protection = true`, following ADR-0009.
+
+## Amendment, 2026-11-13
+
+The decision above put the `aws:SourceIp` condition in the role trust policy.
+That condition cannot work there. Roles Anywhere does not put `aws:SourceIp` in
+the request context when it assumes the role, so the condition denied every
+Sensor session.
+
+The trust policy now has two conditions:
+
+- `aws:SourceArn` must be the Sensor trust anchor.
+- `aws:PrincipalTag/x509Subject/CN` must be the Sensor certificate common name,
+  `honeynet-sensor`. The `corpus` root holds this name and gives it to Ansible
+  through the inventory.
+
+The address limit is now in the permission policy. An inline statement denies
+every S3 action from an address other than the Sensor primary IP.
+
+These consequences replace the first two consequences above:
+
+- A stolen Sensor certificate and key still get a session from any address. The
+  session is inert away from the Sensor address, because each S3 request from
+  another address gets `AccessDenied`. The verification run asserts this with a
+  write from the workstation.
+- A certificate from the same CA with a different common name gets no session.
+  The verification run asserts this with a test certificate.
+- The common name condition does not stop a holder of the CA private key. That
+  key stays on the workstation, as the decision states.
+- A disabled profile stops new sessions only. Credentials that a session issued
+  before stay valid until they expire, at most one session duration.

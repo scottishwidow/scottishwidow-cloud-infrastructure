@@ -54,7 +54,7 @@ variable "corpus_abort_incomplete_multipart_upload_days" {
 }
 
 variable "sensor_ipv4_name" {
-  description = "Name of the Sensor primary IPv4 in Hetzner. The writer role trust policy accepts a session only from this address. The `bootstrap` root creates the address under this name."
+  description = "Name of the Sensor primary IPv4 in Hetzner. The writer role permission policy denies every S3 action from another address. The `bootstrap` root creates the address under this name."
   type        = string
   default     = "sensor-ipv4"
 }
@@ -63,6 +63,12 @@ variable "sensor_ca_certificate_path" {
   description = "Path to the PEM certificate of the Sensor CA. The CA is generated on the workstation at each provisioning, and the trust anchor takes this certificate as its bundle."
   type        = string
   default     = "../../../hetzner/honeynet/pki/ca.crt"
+}
+
+variable "sensor_certificate_common_name" {
+  description = "Subject common name of the Sensor certificate. The writer role trust policy issues a session only to a certificate with this name, and Ansible issues the Sensor certificate with it."
+  type        = string
+  default     = "honeynet-sensor"
 }
 
 variable "sensor_writer_name" {

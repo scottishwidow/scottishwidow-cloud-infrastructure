@@ -1174,6 +1174,24 @@
       failed_when: false
       check_mode: false
 
+    - name: Read whether the Sensor CA stays valid for the minimum days
+      ansible.builtin.command:
+        argv:
+          - openssl
+          - x509
+          - -noout
+          - -enddate
+          - -checkend
+          - "{{ corpus_credential_minimum_validity_days * 86400 }}"
+          - -in
+          - "{{ corpus_credential_ca_certificate_path }}"
+      delegate_to: localhost
+      become: false
+      register: verify_ca_validity
+      changed_when: false
+      failed_when: false
+      check_mode: false
+
     - name: Request a Corpus session as the Vector account
       ansible.builtin.command:
         argv: "{{ ['runuser', '-u', 'vector', '--', corpus_credential_signing_helper_path] + corpus_credential_process_arguments }}"
@@ -1281,7 +1299,7 @@
       changed_when: true
       failed_when: false
 
-    - name: Request a Corpus session from the workstation address with a test certificate
+    - name: Request a Corpus session with a test certificate from the Sensor CA that has another common name
       delegate_to: localhost
       become: false
       block:
@@ -1490,7 +1508,7 @@
       when: verify_corpus_canary_event.stdout | default('') | length > 0
       ignore_errors: true
 
-    - name: Require Honeynet-only collector and time ports, a write-only Sensor session usable only from the Sensor, a refused workstation session, a valid certificate and the canary in the Corpus
+    - name: Require Honeynet-only collector and time ports, a write-only Sensor session usable only from the Sensor, a refused session for another common name, a valid certificate and CA and the canary in the Corpus
       vars:
         verify_port_rules: >-
           {{ verify_input_chain.stdout_lines | map('trim')
@@ -1505,6 +1523,7 @@
           - verify_port_rules | select('search', 'udp dport 123 ') | list | length > 0
           - verify_port_rules | reject('match', verify_honeynet_source) | list == []
           - verify_certificate_validity.rc == 0
+          - verify_ca_validity.rc == 0
           - verify_sensor_session.rc == 0
           - verify_session_write.rc | default(1) == 0
           - verify_session_denied | length == 3
@@ -1519,11 +1538,12 @@
         fail_msg: >-
           collector and time port rules={{ verify_port_rules }};
           certificate={{ verify_certificate_validity.stdout_lines | default([]) }}, expected valid for {{ corpus_credential_minimum_validity_days }} more days;
+          CA={{ verify_ca_validity.stdout_lines | default([]) }}, expected valid for {{ corpus_credential_minimum_validity_days }} more days;
           Sensor session rc={{ verify_sensor_session.rc | default('') }} {{ verify_sensor_session.stderr | default('') | trim }};
           Sensor session write rc={{ verify_session_write.rc | default('not run') }} {{ verify_session_write.stdout | default('') | trim }} {{ verify_session_write.stderr | default('') | trim }};
           Sensor session read, list and delete={{ verify_session_denied | map(attribute='stdout', default='not run') | map('trim') | list }};
           Sensor session write from the workstation rc={{ verify_workstation_write.rc | default('not run') }} {{ verify_workstation_write.stderr | default('') | trim }};
-          workstation session rc={{ verify_workstation_session.rc | default('not run') }} {{ verify_workstation_session.stderr | default('') | trim }};
+          session for another common name rc={{ verify_workstation_session.rc | default('not run') }} {{ verify_workstation_session.stderr | default('') | trim }};
           canary EVE event={{ verify_corpus_canary_event.stdout | default('none', true) }};
           canary object={{ verify_corpus_canary_object.stdout | default('none', true) }} {{ verify_corpus_canary_object.stderr | default('') | trim }}
 
