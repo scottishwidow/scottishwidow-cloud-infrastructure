@@ -22,3 +22,8 @@ output "ssm_scratch_bucket_region" {
   description = "Region of the S3 scratch bucket"
   value       = module.ssm_scratch.s3_bucket_region
 }
+
+output "corpus_bucket_name" {
+  description = "Name of the Corpus bucket that the Hunt Host reads"
+  value       = local.corpus_bucket_name
+}

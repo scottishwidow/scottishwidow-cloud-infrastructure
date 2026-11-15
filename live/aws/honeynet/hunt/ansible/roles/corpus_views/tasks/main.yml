@@ -1,0 +1,55 @@
+---
+- name: Write the normalising views
+  ansible.builtin.template:
+    src: views.sql.j2
+    dest: "{{ corpus_views_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: corpus_views_definition
+
+- name: Read whether the hunt database exists
+  ansible.builtin.stat:
+    path: "{{ duckdb_database_path }}"
+  register: corpus_views_database
+
+- name: Rebuild the hunt database from the views
+  when: >-
+    not corpus_views_database.stat.exists
+    or corpus_views_definition is changed
+    or duckdb_session | default({}) is changed
+    or duckdb_binary | default({}) is changed
+  block:
+    - name: Remove a database file that an earlier build left behind
+      ansible.builtin.file:
+        path: "{{ duckdb_database_path }}.new"
+        state: absent
+
+    - name: Create the views in a new database file
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_path }}"
+          - -bail
+          - -cmd
+          - .read {{ duckdb_session_path }}
+          - -f
+          - "{{ corpus_views_path }}"
+          - "{{ duckdb_database_path }}.new"
+      changed_when: true
+
+    - name: Make the new database file readable by hunt sessions
+      ansible.builtin.file:
+        path: "{{ duckdb_database_path }}.new"
+        owner: root
+        group: root
+        mode: "0644"
+
+    # A rename does not disturb a hunt session that has the old file open.
+    - name: Replace the hunt database with the new file
+      ansible.builtin.command:
+        argv:
+          - mv
+          - --force
+          - "{{ duckdb_database_path }}.new"
+          - "{{ duckdb_database_path }}"
+      changed_when: true

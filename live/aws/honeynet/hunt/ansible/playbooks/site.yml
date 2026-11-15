@@ -1,0 +1,9 @@
+---
+- name: Configure the Hunt Host
+  hosts: hunt_hosts
+  gather_facts: false
+  become: true
+
+  roles:
+    - duckdb
+    - corpus_views

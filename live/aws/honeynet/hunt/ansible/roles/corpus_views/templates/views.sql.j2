@@ -1,0 +1,143 @@
+-- Normalising views over the Corpus. The database file holds these views and no
+-- Corpus data: every query reads the Corpus over S3.
+--
+-- Each source line is read as one JSON value in the `record` column, with no
+-- schema inference. The views extract the fields and cast the types, so a view
+-- can be rewritten and re-run over every partition.
+--
+-- Field naming conventions:
+--   * Column names are snake_case.
+--   * `event_time` is the event time of the source, as TIMESTAMPTZ.
+--   * `src_ip`, `src_port`, `dest_ip`, `dest_port` name the connection ends for
+--     every source. `dest_*` follows Suricata, also where the source says `dst`.
+--   * Ports are INTEGER. Addresses are VARCHAR.
+--   * `record` is the verbatim source record, as JSON.
+--   * `host` and `dt` are the Corpus partition values. Filter on `dt` so that a
+--     query reads only the partitions it needs.
+--   * `object_key` is the Corpus object that holds the record.
+{% macro corpus_read(source) -%}
+read_ndjson_objects(
+        's3://{{ corpus_bucket_name }}/source={{ source }}/*/*/*',
+        compression = 'gzip',
+        filename = true,
+        hive_partitioning = true,
+        hive_types_autocast = false,
+        hive_types = {'source': 'VARCHAR', 'host': 'VARCHAR', 'dt': 'DATE'}
+    )
+{%- endmacro %}
+
+CREATE VIEW corpus_records AS
+SELECT
+    json AS record,
+    source,
+    host,
+    dt,
+    filename AS object_key
+FROM {{ corpus_read('*') }};
+
+CREATE VIEW suricata_records AS
+SELECT
+    json AS record,
+    host,
+    dt,
+    filename AS object_key
+FROM {{ corpus_read('suricata') }};
+
+CREATE VIEW suricata_events AS
+SELECT
+    try_strptime(record->>'$.timestamp', '%Y-%m-%dT%H:%M:%S.%f%z') AS event_time,
+    record->>'$.event_type' AS event_type,
+    TRY_CAST(record->>'$.flow_id' AS UBIGINT) AS flow_id,
+    record->>'$.community_id' AS community_id,
+    record->>'$.in_iface' AS in_iface,
+    record->>'$.src_ip' AS src_ip,
+    TRY_CAST(record->>'$.src_port' AS INTEGER) AS src_port,
+    record->>'$.dest_ip' AS dest_ip,
+    TRY_CAST(record->>'$.dest_port' AS INTEGER) AS dest_port,
+    record->>'$.proto' AS proto,
+    record->>'$.app_proto' AS app_proto,
+    record,
+    host,
+    dt,
+    object_key
+FROM suricata_records;
+
+CREATE VIEW suricata_alerts AS
+SELECT
+    event_time,
+    flow_id,
+    community_id,
+    src_ip,
+    src_port,
+    dest_ip,
+    dest_port,
+    proto,
+    app_proto,
+    TRY_CAST(record->>'$.alert.signature_id' AS BIGINT) AS signature_id,
+    TRY_CAST(record->>'$.alert.rev' AS INTEGER) AS signature_rev,
+    record->>'$.alert.signature' AS signature,
+    record->>'$.alert.category' AS category,
+    TRY_CAST(record->>'$.alert.severity' AS INTEGER) AS severity,
+    record->>'$.alert.action' AS action,
+    record,
+    host,
+    dt,
+    object_key
+FROM suricata_events
+WHERE event_type = 'alert';
+
+CREATE VIEW cowrie_records AS
+SELECT
+    json AS record,
+    host,
+    dt,
+    filename AS object_key
+FROM {{ corpus_read('cowrie') }};
+
+CREATE VIEW cowrie_events AS
+SELECT
+    TRY_CAST(record->>'$.timestamp' AS TIMESTAMPTZ) AS event_time,
+    record->>'$.eventid' AS event_id,
+    record->>'$.session' AS session,
+    record->>'$.protocol' AS protocol,
+    record->>'$.src_ip' AS src_ip,
+    TRY_CAST(record->>'$.src_port' AS INTEGER) AS src_port,
+    record->>'$.dst_ip' AS dest_ip,
+    TRY_CAST(record->>'$.dst_port' AS INTEGER) AS dest_port,
+    record->>'$.username' AS username,
+    record->>'$.password' AS password,
+    record->>'$.input' AS input,
+    record->>'$.url' AS url,
+    record->>'$.shasum' AS shasum,
+    TRY_CAST(record->>'$.duration' AS DOUBLE) AS duration_seconds,
+    record->>'$.message' AS message,
+    record,
+    host,
+    dt,
+    object_key
+FROM cowrie_records;
+
+CREATE VIEW opencanary_records AS
+SELECT
+    json AS record,
+    host,
+    dt,
+    filename AS object_key
+FROM {{ corpus_read('opencanary') }};
+
+-- OpenCanary writes utc_time in UTC with no offset.
+CREATE VIEW opencanary_events AS
+SELECT
+    TRY_CAST((record->>'$.utc_time') || '+00' AS TIMESTAMPTZ) AS event_time,
+    TRY_CAST(record->>'$.logtype' AS INTEGER) AS log_type,
+    record->>'$.node_id' AS node_id,
+    record->>'$.src_host' AS src_ip,
+    TRY_CAST(record->>'$.src_port' AS INTEGER) AS src_port,
+    record->>'$.dst_host' AS dest_ip,
+    TRY_CAST(record->>'$.dst_port' AS INTEGER) AS dest_port,
+    record->'$.logdata' AS logdata,
+    record,
+    host,
+    dt,
+    object_key
+FROM opencanary_records;

@@ -1,0 +1,91 @@
+---
+- name: Create the DuckDB install directory
+  ansible.builtin.file:
+    path: "{{ duckdb_install_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the DuckDB command line
+  ansible.builtin.get_url:
+    url: "{{ duckdb_download_url }}"
+    checksum: "{{ duckdb_download_checksum }}"
+    dest: "{{ duckdb_install_directory }}/duckdb.gz"
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: Unpack the DuckDB command line
+  ansible.builtin.command:
+    argv:
+      - gzip
+      - --decompress
+      - --keep
+      - "{{ duckdb_install_directory }}/duckdb.gz"
+    creates: "{{ duckdb_install_directory }}/duckdb"
+
+- name: Make the DuckDB command line executable
+  ansible.builtin.file:
+    path: "{{ duckdb_install_directory }}/duckdb"
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Put the pinned DuckDB command line on the path
+  ansible.builtin.file:
+    src: "{{ duckdb_install_directory }}/duckdb"
+    dest: "{{ duckdb_path }}"
+    state: link
+    force: true
+  register: duckdb_binary
+
+- name: Create the DuckDB state and config directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+  loop:
+    - "{{ duckdb_state_directory }}"
+    - "{{ duckdb_extension_directory }}"
+    - "{{ duckdb_config_directory }}"
+
+# Each hunt session spills into its own directory under here, so the directory is shared and sticky.
+- name: Create the DuckDB spill directory on the gp3 volume
+  ansible.builtin.file:
+    path: "{{ duckdb_spill_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "1777"
+
+- name: Install the DuckDB extensions that read the Corpus over S3
+  ansible.builtin.command:
+    argv:
+      - "{{ duckdb_path }}"
+      - -bail
+      - -c
+      - >-
+        SET extension_directory = '{{ duckdb_extension_directory }}';
+        INSTALL {{ item }};
+    creates: "{{ duckdb_extension_directory }}/v{{ duckdb_version }}/{{ duckdb_platform }}/{{ item }}.duckdb_extension"
+  loop: "{{ duckdb_extensions }}"
+
+- name: Write the session settings that every hunt session reads
+  ansible.builtin.template:
+    src: session.sql.j2
+    dest: "{{ duckdb_session_path }}"
+    owner: root
+    group: root
+    mode: "0644"
+  register: duckdb_session
+
+- name: Install the hunt command
+  ansible.builtin.template:
+    src: hunt.sh.j2
+    dest: "{{ duckdb_hunt_command_path }}"
+    owner: root
+    group: root
+    mode: "0755"
