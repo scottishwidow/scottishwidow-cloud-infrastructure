@@ -5,7 +5,7 @@ evebox_data_directory: /var/lib/evebox
 
 evebox_eve_log: /var/log/suricata/eve.json
 
-evebox_retention_days: "{{ suricata_log_retention_days }}"
+evebox_retention_days: 14
 evebox_retention_size: 10 GB
 
 evebox_eve_group: "{{ suricata_group }}"

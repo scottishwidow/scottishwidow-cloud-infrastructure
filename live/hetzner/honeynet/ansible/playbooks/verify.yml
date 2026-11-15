@@ -1119,6 +1119,33 @@
       until: verify_evebox_alerts.json.events | default([]) | length > 0
       failed_when: false
 
+    - name: Read the EveBox config
+      ansible.builtin.slurp:
+        src: /etc/evebox/evebox.yaml
+      become: true
+      register: verify_evebox_config
+
+    - name: Read the Suricata logrotate config
+      ansible.builtin.slurp:
+        src: /etc/logrotate.d/suricata
+      register: verify_suricata_logrotate
+
+    - name: Require a 14 day EveBox window on the local EVE log and a 3 day Suricata rotation
+      vars:
+        verify_evebox_settings: "{{ verify_evebox_config.content | b64decode | from_yaml }}"
+        verify_suricata_rotate_counts: >-
+          {{ verify_suricata_logrotate.content | b64decode
+             | regex_findall('(?m)^\s*rotate\s+(\d+)\s*$') }}
+      ansible.builtin.assert:
+        that:
+          - verify_evebox_settings.database.retention.days | int == 14
+          - verify_evebox_settings.input.paths == ['/var/log/suricata/eve.json']
+          - verify_suricata_rotate_counts == ['3']
+        fail_msg: >-
+          EveBox retention days={{ verify_evebox_settings.database.retention.days | default('none') }};
+          EveBox input paths={{ verify_evebox_settings.input.paths | default([]) }};
+          Suricata rotate counts={{ verify_suricata_rotate_counts }}
+
     - name: Require EveBox on localhost only, through the SSH tunnel, with the canary alert
       vars:
         verify_evebox_listen_addresses: "{{ verify_evebox_listeners.stdout_lines | map('split') | map(attribute=3) | list }}"
