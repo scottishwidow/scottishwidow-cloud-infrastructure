@@ -8,3 +8,4 @@ components:
     hetzner/honeynet/sensor:
       vars: !include ../live/hetzner/honeynet/sensor/terraform.tfvars
     hetzner/honeynet/honeypots: {}
+    aws/honeynet/hunt: {}
