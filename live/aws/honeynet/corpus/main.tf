@@ -1,6 +1,6 @@
 module "corpus" {
   source  = "terraform-aws-modules/s3-bucket/aws"
-  version = "5.17.0"
+  version = "5.18.0"
 
   bucket           = format("%s-%s-%s-an", var.corpus_bucket_prefix, data.aws_caller_identity.current.account_id, data.aws_region.current.region)
   bucket_namespace = "account-regional"

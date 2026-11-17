@@ -102,7 +102,7 @@ module "hunt_host_role" {
 
 module "ssm_scratch" {
   source  = "terraform-aws-modules/s3-bucket/aws"
-  version = "5.17.0"
+  version = "5.18.0"
 
   bucket           = local.ssm_scratch_bucket_name
   bucket_namespace = "account-regional"
