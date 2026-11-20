@@ -14,7 +14,6 @@ state key in the `tf-state-scottishwidow-management` bucket.
 | `bootstrap/` | `mgmt/bootstrap/terraform.tfstate` | The state bucket and its access-log bucket |
 | `network/` | `mgmt/network/terraform.tfstate` | The VPC, subnets, routes, and internet gateway |
 | `nextcloud/` | `mgmt/nextcloud/terraform.tfstate` | The Nextcloud instance, its security group, the backup policy, and the scratch bucket |
-| `jenkins/` | none | Nothing. An inactive placeholder. |
 
 The Nextcloud root finds the VPC and subnet through data sources. It does not read
 the network state. The Ansible is in `nextcloud/ansible/`.
