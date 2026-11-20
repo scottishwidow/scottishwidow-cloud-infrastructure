@@ -7,7 +7,7 @@ module "next_cloud" {
   ami                         = data.aws_ssm_parameter.ubuntu.value
   instance_type               = var.next_cloud_instance_type
   subnet_id                   = data.aws_subnet.public_zone_1.id
-  vpc_security_group_ids      = [module.next_cloud_sg.security_group_id]
+  vpc_security_group_ids      = [module.next_cloud_sg.id]
   create_security_group       = false
   associate_public_ip_address = true
 
@@ -47,12 +47,76 @@ module "next_cloud_sg" {
   description = "Nextcloud instance: HTTP/HTTPS inbound only"
   vpc_id      = data.aws_vpc.management.id
 
-  ingress_cidr_blocks = ["0.0.0.0/0"]
-  ingress_rules       = ["http-80-tcp", "https-443-tcp"]
+  ingress_rules = {
+    http = {
+      description = "HTTP"
+      from_port   = 80
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+    https = {
+      description = "HTTPS"
+      from_port   = 443
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+  }
 
-  egress_rules = ["all-all"]
+  egress_rules = {
+    all-ipv4 = {
+      description = "All protocols"
+      ip_protocol = "-1"
+      cidr_ipv4   = "0.0.0.0/0"
+    }
+    all-ipv6 = {
+      description = "All protocols"
+      ip_protocol = "-1"
+      cidr_ipv6   = "::/0"
+    }
+  }
 
   tags = var.tags
+}
+
+# TODO: Remove the moved, removed, and import blocks below after the security-group v6 migration is applied.
+# The v5 rules are forgotten and the same AWS rules are imported, so no rule is deleted or duplicated during apply.
+moved {
+  from = module.next_cloud_sg.aws_security_group.this_name_prefix[0]
+  to   = module.next_cloud_sg.aws_security_group.this[0]
+}
+
+removed {
+  from = module.next_cloud_sg.aws_security_group_rule.ingress_rules
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = module.next_cloud_sg.aws_security_group_rule.egress_rules
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+import {
+  to = module.next_cloud_sg.aws_vpc_security_group_ingress_rule.this["http"]
+  id = "sgr-07b48b658ab715fe7"
+}
+
+import {
+  to = module.next_cloud_sg.aws_vpc_security_group_ingress_rule.this["https"]
+  id = "sgr-008e1644450ec254a"
+}
+
+import {
+  to = module.next_cloud_sg.aws_vpc_security_group_egress_rule.this["all-ipv4"]
+  id = "sgr-05f331dbae565b959"
+}
+
+import {
+  to = module.next_cloud_sg.aws_vpc_security_group_egress_rule.this["all-ipv6"]
+  id = "sgr-06ca79c1760b555fa"
 }
 
 module "next_cloud_backup" {
