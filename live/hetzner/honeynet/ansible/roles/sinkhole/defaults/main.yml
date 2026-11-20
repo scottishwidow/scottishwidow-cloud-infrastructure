@@ -1,6 +1,6 @@
 ---
 sinkhole_nginx_image: docker.io/library/nginx:1.31.9-alpine@sha256:fb4658584bd9a916ffb6f6e365f97c25cfdb2923801f551ea08356e695f14ff7
-sinkhole_coredns_image: docker.io/coredns/coredns:1.14.7
+sinkhole_coredns_image: docker.io/coredns/coredns:1.15.0@sha256:0a9d8c8ddf34347eb59aad9a8784f0710de88d6d112726d11d271f9bc6daca26
 
 sinkhole_user: sinkhole
 sinkhole_home: /var/lib/sinkhole
