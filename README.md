@@ -80,7 +80,7 @@ Do not do these steps when the bucket exists. Use `terraform init` and `terrafor
 
 ### Hetzner bootstrap
 
-`live/hetzner/ovpn/bootstrap` creates the Hetzner state bucket, which both Hetzner environments share, and the OVPN admin SSH key. It keeps its state locally. Apply it manually before all other Hetzner roots:
+`live/hetzner/ovpn/bootstrap` creates the Hetzner state bucket, which both Hetzner environments share, and the OVPN admin SSH key. It keeps its state locally. Set `ssh_key_name` and `ssh_public_key_path` in `live/hetzner/ovpn/bootstrap/terraform.tfvars`. Git does not keep this file. Apply the root manually before all other Hetzner roots:
 
 ```sh
 cd live/hetzner/ovpn/bootstrap
