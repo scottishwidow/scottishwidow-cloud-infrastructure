@@ -76,49 +76,6 @@ module "next_cloud_sg" {
   tags = var.tags
 }
 
-# TODO: Remove the moved, removed, and import blocks below after the security-group v6 migration is applied.
-# The v5 rules are forgotten and the same AWS rules are imported, so no rule is deleted or duplicated during apply.
-moved {
-  from = module.next_cloud_sg.aws_security_group.this_name_prefix[0]
-  to   = module.next_cloud_sg.aws_security_group.this[0]
-}
-
-removed {
-  from = module.next_cloud_sg.aws_security_group_rule.ingress_rules
-
-  lifecycle {
-    destroy = false
-  }
-}
-
-removed {
-  from = module.next_cloud_sg.aws_security_group_rule.egress_rules
-
-  lifecycle {
-    destroy = false
-  }
-}
-
-import {
-  to = module.next_cloud_sg.aws_vpc_security_group_ingress_rule.this["http"]
-  id = "sgr-07b48b658ab715fe7"
-}
-
-import {
-  to = module.next_cloud_sg.aws_vpc_security_group_ingress_rule.this["https"]
-  id = "sgr-008e1644450ec254a"
-}
-
-import {
-  to = module.next_cloud_sg.aws_vpc_security_group_egress_rule.this["all-ipv4"]
-  id = "sgr-05f331dbae565b959"
-}
-
-import {
-  to = module.next_cloud_sg.aws_vpc_security_group_egress_rule.this["all-ipv6"]
-  id = "sgr-06ca79c1760b555fa"
-}
-
 module "next_cloud_backup" {
   source = "../../../../modules/dlm_backup"
 
