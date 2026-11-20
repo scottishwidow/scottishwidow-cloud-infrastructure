@@ -39,7 +39,7 @@ variable "admin_ssh_port" {
 }
 
 variable "honeypot_1_private_ip" {
-  description = "Private IP of honeypot-1. The Sensor forwards the honeypot ports to it. The Makefile sets it for the sensor and honeypots roots"
+  description = "Private IP of honeypot-1. The Sensor forwards the honeypot ports to it. The honeynet stack sets it for the sensor and honeypots roots"
   type        = string
 
   validation {
@@ -77,7 +77,7 @@ variable "proxy_port" {
 }
 
 variable "collector_port" {
-  description = "TCP port of the Vector collector on the Sensor. The Honeypots send Session Evidence to it. The Makefile sets it for the sensor and honeypots roots. Only the Honeynet network can reach it"
+  description = "TCP port of the Vector collector on the Sensor. The Honeypots send Session Evidence to it. The honeynet stack sets it for the sensor and honeypots roots. Only the Honeynet network can reach it"
   type        = number
   default     = 6000
 }

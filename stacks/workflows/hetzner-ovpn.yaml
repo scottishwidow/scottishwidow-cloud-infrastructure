@@ -1,0 +1,63 @@
+workflows:
+  apply:
+    description: Apply network, openvpn and private_hosts, in that order.
+    stack: hetzner-ovpn
+    working_directory: .
+    steps:
+      - &require_env
+        name: require-env
+        type: shell
+        command: |
+          : "${AWS_PROFILE:?AWS_PROFILE is not set}"
+          : "${OVPN_HCLOUD_TOKEN:?OVPN_HCLOUD_TOKEN is not set}"
+      - name: apply-network
+        command: terraform apply hetzner/ovpn/network
+      - name: apply-openvpn
+        command: terraform apply hetzner/ovpn/openvpn
+      - name: apply-private-hosts
+        command: terraform apply hetzner/ovpn/private_hosts
+
+  destroy:
+    description: Destroy private_hosts, openvpn and network, in that order.
+    stack: hetzner-ovpn
+    working_directory: .
+    steps:
+      - *require_env
+      - name: destroy-private-hosts
+        command: terraform destroy hetzner/ovpn/private_hosts
+      - name: destroy-openvpn
+        command: terraform destroy hetzner/ovpn/openvpn
+      - name: destroy-network
+        command: terraform destroy hetzner/ovpn/network
+
+  configure:
+    description: Write the Ansible inventory from the openvpn outputs, then run openvpn.yml.
+    stack: hetzner-ovpn
+    working_directory: .
+    steps:
+      - *require_env
+      - name: init-openvpn
+        command: terraform init hetzner/ovpn/openvpn
+      - name: inventory
+        type: shell
+        working_directory: live/hetzner/ovpn/ansible
+        command: |
+          set -eu
+          atmos terraform output hetzner/ovpn/openvpn -s hetzner-ovpn --skip-init -- -json ansible_inventory > inventory/hosts.json.tmp
+          mv inventory/hosts.json.tmp inventory/hosts.json
+          rm -f .known_hosts
+      - name: openvpn
+        type: shell
+        working_directory: live/hetzner/ovpn/ansible
+        command: ansible-playbook playbooks/openvpn.yml
+
+  verify:
+    description: Check that the OpenVPN server on the Gateway is active. Run configure first.
+    stack: hetzner-ovpn
+    working_directory: .
+    steps:
+      - *require_env
+      - name: verify
+        type: shell
+        working_directory: live/hetzner/ovpn/ansible
+        command: ansible gateways -m ansible.builtin.command -a "systemctl is-active openvpn-server@server"

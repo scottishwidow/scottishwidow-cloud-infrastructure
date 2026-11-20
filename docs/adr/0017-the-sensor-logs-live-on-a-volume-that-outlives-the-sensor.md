@@ -60,3 +60,7 @@ breaks ADR-0013.
 - The Log Volume uses the location of the Sensor, so they cannot differ.
 - The first run leaves the old logs on the root disk, under the bind mounts.
   They go away with the next Sensor replacement.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f honeynet`, and `make destroy` is now `atmos workflow destroy -f honeynet`.

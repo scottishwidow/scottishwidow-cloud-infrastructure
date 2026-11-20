@@ -113,60 +113,67 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
 
 1. Create a key pair for the Honeynet only, at `~/.ssh/honeynet`. Do not use a key that is trusted elsewhere.
 2. Set `admin_cidrs` in `sensor/terraform.tfvars`. This file is not in Git.
-3. Apply `bootstrap` once. It creates the Hetzner SSH key and the Sensor public IPv4, and keeps its state locally:
+3. Provision and configure:
 
    ```sh
-   make init-bootstrap apply-bootstrap
+   atmos workflow apply -f honeynet      # bootstrap, Sensor CA, corpus, network, sensor, honeypots, hunt
+   atmos workflow configure -f honeynet  # writes the inventory, runs site.yml, issues the Sensor certificate
+   atmos workflow verify -f honeynet     # runs verify.yml
    ```
 
-   The `corpus` root reads this address by name, so apply `bootstrap` before `corpus`.
+   `bootstrap` creates the Hetzner SSH key and the Sensor public IPv4, and keeps its state locally. The `corpus` root reads this address by name, so `bootstrap` comes before `corpus`.
 
-4. Provision and configure:
+4. Configure and verify the Hunt Host:
 
    ```sh
-   make init
-   make apply      # Sensor CA, then corpus, network, sensor, honeypots, hunt
-   make configure  # writes the inventory, runs site.yml, issues the Sensor certificate
-   make verify     # runs verify.yml
+   atmos workflow configure-hunt -f honeynet  # installs DuckDB and creates the normalising views
+   atmos workflow verify-hunt -f honeynet     # runs the Hunt verify.yml
    ```
 
-5. Configure and verify the Hunt Host:
-
-   ```sh
-   make configure-hunt  # installs DuckDB and creates the normalising views
-   make verify-hunt     # runs the Hunt verify.yml
-   ```
-
-   Run `make verify` before `make verify-hunt`. `make verify-hunt` reads the Session Evidence probe that `make verify` sends, and it finds only a probe from the last 7 days.
+   Run `verify` before `verify-hunt`. `verify-hunt` reads the Session Evidence probe that `verify` sends, and it finds only a probe from the last 7 days.
 
 The order is fixed:
 
-1. `make apply` generates the Sensor CA in `pki/` on the workstation, if it does not exist. The CA private key does not leave the workstation.
+1. The `apply` workflow generates the Sensor CA in `pki/` on the workstation after `bootstrap` and before `corpus`, if `pki/ca.crt` does not exist. The CA private key does not leave the workstation.
 2. The `corpus` apply registers the CA certificate as the Roles Anywhere trust anchor.
-3. `make configure` generates the Sensor private key on the Sensor and issues a new Sensor certificate from the CA. Each run issues a new certificate. Nothing on the Sensor renews it.
+3. The `configure` workflow generates the Sensor private key on the Sensor and issues a new Sensor certificate from the CA. Each run issues a new certificate. Nothing on the Sensor renews it.
 
-`make destroy` removes the disposable roots in the reverse order, then deletes `pki/`. The next `make apply` generates a new CA. It does not remove `bootstrap`, so the Sensor keeps its address across a destroy and a new apply, and it does not remove `corpus`, so the Corpus keeps 13 months of telemetry. See [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md).
+To plan one root, run Atmos directly. The `corpus` root reads `pki/ca.crt` and the Sensor primary IP at plan, so `pki/` and `bootstrap` must exist:
 
-To destroy `bootstrap` as well, first set `delete_protection = false` on the primary IP and apply. A recreate then gets a new address from Hetzner, and `corpus` must be applied after `bootstrap` to put that address in the writer role permission policy. The `corpus` root cannot plan while no primary IP exists. See [ADR-0023](../../../docs/adr/0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md).
+```sh
+atmos terraform plan aws/honeynet/corpus -s honeynet
+```
+
+### Teardown
+
+The `destroy` workflow removes `hunt`, `honeypots`, `sensor`, `network` and `bootstrap` in that order, then deletes `pki/`. It never destroys `corpus`, so the Corpus keeps 13 months of telemetry. The next `apply` generates a new CA, and Hetzner gives the Sensor a new address. `corpus` puts that address in the writer role permission policy. See [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md) and [ADR-0023](../../../docs/adr/0023-the-bootstrap-root-is-disposable-and-the-sensor-address-is-read-at-apply.md).
+
+The workflow does not turn off delete protection. Do these steps by hand first:
+
+1. Decide what to do with the Log Volume. To keep it, remove it from the `sensor` state. To delete it, set `delete_protection = false` and apply. See [Rules](#rules).
+2. Set `delete_protection = false` on `hcloud_primary_ip.sensor` in `bootstrap/main.tf`, then apply `bootstrap`:
+
+   ```sh
+   atmos terraform apply hetzner/honeynet/bootstrap -s honeynet
+   ```
+
+3. Run the Teardown:
+
+   ```sh
+   atmos workflow destroy -f honeynet
+   ```
+
+4. Set `delete_protection` back to `true` before the next `apply`.
 
 ### Full teardown
 
-A full teardown deletes the Corpus and all retained telemetry. This is not the normal procedure. [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md) keeps `corpus` and `bootstrap` across a teardown.
+A full teardown deletes the Corpus and all retained telemetry. This is not the normal procedure. [ADR-0022](../../../docs/adr/0022-the-corpus-outlives-the-honeynet.md) keeps `corpus` across a Teardown.
 
-The destroy order is the reverse of the apply order: `hunt`, `honeypots`, `sensor`, `network`, `corpus`, `bootstrap`.
+`destroy-corpus` is the only workflow that destroys `corpus`. The `corpus` root reads `pki/ca.crt` and the Sensor primary IP, so run it while `pki/` and `bootstrap` still exist. Run each step in this order:
 
-Do not use `make destroy` for a full teardown. It deletes `pki/`, and the `corpus` root reads `pki/ca.crt` at plan. Run each step in this order:
-
-1. Decide what to do with the Log Volume. To keep it, remove it from the `sensor` state. To delete it, set `delete_protection = false` and apply. See [Rules](#rules).
-2. `make destroy-hunt`
-3. `make destroy-honeypots`
-4. `make destroy-sensor`
-5. `make destroy-network`
-6. Set `force_destroy = true` on `module "corpus"` in `live/aws/honeynet/corpus/main.tf`, then run `make apply-corpus`. The bucket is versioned, and a destroy fails while it holds objects.
-7. `make destroy-corpus`. The `corpus` root reads `pki/ca.crt` and the Sensor primary IP, so `pki/` and `bootstrap` must still exist.
-8. `rm -rf pki`
-9. Set `delete_protection = false` on `hcloud_primary_ip.sensor` in `bootstrap/main.tf`, then run `make apply-bootstrap`.
-10. `make destroy-bootstrap`. This also deletes the Hetzner SSH key.
+1. Empty the Corpus bucket by hand, including all object versions and delete markers. The bucket is versioned. `destroy-corpus` does not empty it, and it stops with an error while the bucket holds objects.
+2. `atmos workflow destroy-corpus -f honeynet`
+3. Do the [Teardown](#teardown). This also deletes the Hetzner SSH key.
 
 To move an address that an older revision created in the `sensor` root, follow [the address move runbook](../../../docs/runbooks/honeynet-sensor-address-move.md).
 
@@ -178,20 +185,20 @@ To move an address that an older revision created in the `sensor` root, follow [
   ssh -i ~/.ssh/honeynet -p 2222 -L 5636:127.0.0.1:5636 admin@<sensor_public_ipv4>
   ```
 
-- **IDS or IPS.** Set `suricata_mode` in `ansible/playbooks/group_vars/all.yml`, then run `make configure`. nftables does not change.
+- **IDS or IPS.** Set `suricata_mode` in `ansible/playbooks/group_vars/all.yml`, then run `atmos workflow configure -f honeynet`. nftables does not change.
 - **Rule updates.** A systemd timer runs `suricata-update` daily for ET Open.
-- **Hunt.** The Hunt Host is disposable. To start a hunt on its own, run `make apply-hunt configure-hunt`. To stop it, run `make destroy-hunt`. The Corpus does not change.
+- **Hunt.** The Hunt Host is disposable. To start a hunt on its own, run `atmos workflow apply-hunt -f honeynet`, then `atmos workflow configure-hunt -f honeynet`. To stop it, run `atmos terraform destroy aws/honeynet/hunt -s honeynet`. The Corpus does not change.
 
 ## Rules
 
 - User data owns sysctl and nftables on all hosts. Ansible only checks them.
-- A change to the honeypot ports, the DNAT or the nftables rules replaces the Sensor. Run `make configure` again after the replacement.
-- To add a honeypot port, add it to `honeypot_tcp_ports` in the Sensor root. If the port is below 1024, also map it in `TF_VAR_honeypot_port_redirects` in the Makefile.
+- A change to the honeypot ports, the DNAT or the nftables rules replaces the Sensor. Run `atmos workflow configure -f honeynet` again after the replacement.
+- To add a honeypot port, add it to `honeypot_tcp_ports` in the Sensor root. If the port is below 1024, also map it in `honeypot_port_redirects` in `stacks/_honeynet-defaults.yaml`.
 - Do not open Containment. Send new outbound protocols to the Sinkhole.
 - The Honeynet collects no malware samples.
-- To revoke the Sensor credential, set `sensor_writer_profile_enabled = false` in the `corpus` root and run `make apply-corpus`. There is no CRL.
-- The Log Volume has delete protection. To destroy the Sensor and keep the logs, run `terraform -chdir=sensor state rm module.sensor_log_volume.hcloud_volume.this` before `make destroy`. Before the next `make apply`, import it again with `terraform -chdir=sensor import module.sensor_log_volume.hcloud_volume.this <volume_id>`.
-- To delete the Log Volume, set `delete_protection = false` on the `sensor_log_volume` module, apply, then run `make destroy`.
+- To revoke the Sensor credential, set `sensor_writer_profile_enabled = false` in the `corpus` root and run `atmos terraform apply aws/honeynet/corpus -s honeynet`. There is no CRL.
+- The Log Volume has delete protection. To destroy the Sensor and keep the logs, run `atmos terraform state rm hetzner/honeynet/sensor -s honeynet module.sensor_log_volume.hcloud_volume.this` before the `destroy` workflow. Before the next `apply`, import it again with `atmos terraform import hetzner/honeynet/sensor -s honeynet module.sensor_log_volume.hcloud_volume.this <volume_id>`.
+- To delete the Log Volume, set `delete_protection = false` on the `sensor_log_volume` module, apply `sensor`, then run the `destroy` workflow.
 - Every banner and identity comes from `honeypot_persona` in `ansible/playbooks/group_vars/all.yml`. Do not set a banner in a role.
 
 ## Decisions

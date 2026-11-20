@@ -47,3 +47,7 @@ address in the IAM condition survives a teardown.
 - The `bootstrap` root keeps local state that is not in version control. The
   generated `corpus` tfvars file is committed, so the Sensor address survives the
   loss of that state file. Recovery of the primary IP is one `terraform import`.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. The `honeynet` workflows hold the apply and destroy order, only `destroy-corpus` destroys `corpus`, and `make apply-hunt` is now `atmos workflow apply-hunt -f honeynet`.

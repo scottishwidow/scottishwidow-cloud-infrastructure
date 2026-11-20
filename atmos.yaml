@@ -1,4 +1,10 @@
-base_path: "./"
+base_path: "."
+
+version:
+  constraint:
+    require: "1.232.0"
+    enforcement: fatal
+    message: "This repository requires Atmos 1.232.0 exactly."
 
 components:
   terraform:
@@ -14,3 +20,7 @@ stacks:
     - "**/*.yaml"
   excluded_paths:
     - "**/_*.yaml"
+    - "workflows/**/*"
+
+workflows:
+  base_path: "stacks/workflows"

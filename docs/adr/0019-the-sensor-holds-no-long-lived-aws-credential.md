@@ -80,3 +80,7 @@ These consequences replace the first two consequences above:
   key stays on the workstation, as the decision states.
 - A disabled profile stops new sessions only. Credentials that a session issued
   before stay valid until they expire, at most one session duration.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f honeynet`.

@@ -56,3 +56,7 @@ outbound connection to masquerade.
   It only reads them.
 - A new honeypot port goes in the Sensor root and replaces the Sensor. After the
   replacement, run `make configure` again.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f honeynet`.

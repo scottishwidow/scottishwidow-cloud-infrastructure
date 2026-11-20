@@ -9,7 +9,7 @@
     that: log_volume_device_state.stat.exists
     fail_msg: >-
       {{ log_volume_device }} is missing on the Sensor. The Log Volume and its attachment
-      come from live/hetzner/honeynet/sensor. Apply that root, then run make configure again.
+      come from live/hetzner/honeynet/sensor. Apply that root, then run atmos workflow configure -f honeynet again.
     quiet: true
 
 - name: Write the Log Volume mount unit

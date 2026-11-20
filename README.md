@@ -13,9 +13,9 @@
 ### Tools
 
 - Terraform 1.10 or later. The S3 backends use `use_lockfile`, which needs 1.10.
-- GNU Make, to provision the Hetzner roots in the correct order.
+- Atmos 1.232.0 exactly. `atmos.yaml` stops on another version. The workflows run every environment in the correct order.
 - Ansible, to configure the hosts.
-- Atmos, to plan and apply a root through its stack.
+- OpenSSL 3, for the Sensor CA of the Honeynet.
 
 ### AWS credentials
 
@@ -44,7 +44,7 @@ export OVPN_HCLOUD_TOKEN=<token>
 export HONEYNET_HCLOUD_TOKEN=<token>
 ```
 
-Each Makefile gives its token to Terraform as `HCLOUD_TOKEN`. It ignores an `HCLOUD_TOKEN` that the shell already exports.
+Each stack gives its own token to Terraform as `HCLOUD_TOKEN`, in the `env:` section of the stack file. Atmos ignores an `HCLOUD_TOKEN` that the shell already exports. The two tokens never cross, because the two Hetzner projects share nothing.
 
 ### Bootstrap a new state bucket
 
@@ -85,45 +85,58 @@ HCLOUD_TOKEN=$OVPN_HCLOUD_TOKEN terraform apply
 
 ## Atmos
 
-Atmos orchestrates each root through a stack, in `atmos.yaml` and `stacks/`. It
-wraps the same Terraform roots and backends; it does not replace the Makefiles,
-which still hold the apply order for the Hetzner roots.
+Atmos orchestrates each root through a stack, in `atmos.yaml` and `stacks/`. Atmos workflows in `stacks/workflows/` own the apply and destroy order of each environment. Each workflow file has the name of its stack and sets that stack.
 
 | Stack | Covers |
 |---|---|
 | `aws-management` | `live/aws/management/network`, `live/aws/management/nextcloud` |
 | `hetzner-ovpn` | `live/hetzner/ovpn/network`, `openvpn`, `private_hosts` |
-| `honeynet` | `live/aws/honeynet/corpus`, `live/hetzner/honeynet/network`, `sensor`, `honeypots`, `live/aws/honeynet/hunt` |
+| `honeynet` | `live/hetzner/honeynet/bootstrap`, `live/aws/honeynet/corpus`, `live/hetzner/honeynet/network`, `sensor`, `honeypots`, `live/aws/honeynet/hunt` |
+
+| Workflow | `aws-management` | `hetzner-ovpn` | `honeynet` |
+|---|---|---|---|
+| `apply` | `network`, `nextcloud` | `network`, `openvpn`, `private_hosts` | `bootstrap`, Sensor CA, `corpus`, `network`, `sensor`, `honeypots`, `hunt` |
+| `destroy` | None | `private_hosts`, `openvpn`, `network` | `hunt`, `honeypots`, `sensor`, `network`, `bootstrap`, then `pki/` |
+| `configure` | `nextcloud-aio.yml` | Inventory, then `openvpn.yml` | Inventory, then `site.yml` |
+| `verify` | None | OpenVPN service check | `verify.yml` |
+
+The `honeynet` file also has `apply-hunt`, `configure-hunt`, `verify-hunt` and `destroy-corpus`. See [the Honeynet README](./live/hetzner/honeynet/README.md#provisioning).
 
 ```sh
-atmos terraform plan aws/management/network -s aws-management
-atmos terraform apply hetzner/ovpn/openvpn -s hetzner-ovpn
+atmos workflow apply -f hetzner-ovpn
+atmos workflow configure -f hetzner-ovpn
 ```
 
-The `bootstrap` roots have no stack entry. Run them with plain Terraform, as
-in [Bootstrap a new state bucket](#bootstrap-a-new-state-bucket).
+Obey these rules:
+
+- Each workflow stops before Terraform runs if `AWS_PROFILE` or the Hetzner token of the environment is not set.
+- `apply` and `destroy` ask for confirmation at each root.
+- `apply` ends after the last Terraform root. Run `configure` and `verify` separately.
+- There is no `plan` workflow. A root reads earlier roots with data sources, so its plan does not show changes that are not yet applied to those roots. Plan one root at a time:
+
+  ```sh
+  atmos terraform plan hetzner/ovpn/network -s hetzner-ovpn
+  ```
+
+- No workflow turns off delete protection. Turn off the protection and apply that root before a `destroy` workflow. A protected resource stops the destroy at its root.
+- Stack files are the only source of Terraform variable values. Only secrets come from `TF_VAR_*` or the environment.
+
+The state bucket `bootstrap` roots, `live/aws/management/bootstrap` and `live/hetzner/ovpn/bootstrap`, have no stack entry. They create the backend of the other roots. Run them with plain Terraform, as in [Bootstrap a new state bucket](#bootstrap-a-new-state-bucket).
 
 ## OVPN provisioning
 
-Use the Makefile in `live/hetzner/ovpn`. It stops if `AWS_PROFILE` or `OVPN_HCLOUD_TOKEN` is not set.
-
-| Command | Order |
-|---|---|
-| `make init`, `make apply` | `network`, `openvpn`, `private_hosts` |
-| `make destroy` | `private_hosts`, `openvpn`, `network` |
-
-To run one action on one root, use `make <action>-<root>`. To pass arguments to Terraform, use `TF_ARGS`:
+Do the [prerequisites](#prerequisites) first. Then:
 
 ```sh
-make plan-network TF_ARGS=-refresh=false
+atmos workflow apply -f hetzner-ovpn
+atmos workflow configure -f hetzner-ovpn
+atmos workflow verify -f hetzner-ovpn
 ```
 
 Obey these rules:
 
 - Apply `openvpn` before `private_hosts`. The Gateway uses the fixed private IP `10.10.0.2`. If a Private Host is created first, Hetzner can give that IP to the Private Host.
-- There is no `make plan` for all roots. `openvpn` and `private_hosts` read the network with data sources, so their plan does not show changes that are not yet applied to `network`. Plan and apply one root at a time.
-- The Makefile does not manage `bootstrap`, because it holds the state bucket of the other roots.
-- `make destroy` stops at `openvpn` because the Gateway primary IPv4 has delete protection. Remove the protection manually if you must delete the IP.
+- The Gateway primary IPv4 has delete protection, so `destroy` stops at `openvpn` while it exists. To delete the IP, set `delete_protection = false` on `hcloud_primary_ip.gateway` in `openvpn/main.tf` and apply `openvpn` first.
 
 ## Honeynet provisioning
 

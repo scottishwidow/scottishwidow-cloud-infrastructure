@@ -1,0 +1,32 @@
+workflows:
+  apply:
+    description: Apply network and nextcloud, in that order.
+    stack: aws-management
+    working_directory: .
+    steps:
+      - &require_env
+        name: require-env
+        type: shell
+        command: ': "${AWS_PROFILE:?AWS_PROFILE is not set}"'
+      - name: apply-network
+        command: terraform apply aws/management/network
+      - name: apply-nextcloud
+        command: terraform apply aws/management/nextcloud
+
+  configure:
+    description: Deploy the Nextcloud AIO mastercontainer with nextcloud-aio.yml.
+    stack: aws-management
+    working_directory: .
+    steps:
+      - *require_env
+      - name: init-nextcloud
+        command: terraform init aws/management/nextcloud
+      - name: nextcloud-aio
+        type: shell
+        working_directory: live/aws/management/nextcloud/ansible
+        command: |
+          set -eu
+          SSM_SCRATCH_BUCKET="$(atmos terraform output aws/management/nextcloud -s aws-management --skip-init -- -raw ssm_scratch_bucket_name)"
+          AWS_REGION="$(atmos terraform output aws/management/nextcloud -s aws-management --skip-init -- -raw ssm_scratch_bucket_region)"
+          export SSM_SCRATCH_BUCKET AWS_REGION
+          ansible-playbook playbooks/nextcloud-aio.yml

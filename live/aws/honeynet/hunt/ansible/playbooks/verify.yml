@@ -203,7 +203,7 @@
           - verify_probe.session | default('') | length > 0
         fail_msg: >-
           No Cowrie session of the Honeynet verification run was found in the last
-          {{ verify_probe_lookback_days }} days. Run `make verify` before this run.
+          {{ verify_probe_lookback_days }} days. Run `atmos workflow verify -f honeynet` before this run.
           rc={{ verify_probe_session.rc | default('none') }} stdout={{ verify_probe_session.stdout | default('') }} stderr={{ verify_probe_session.stderr | default('') }}
         success_msg: >-
           The probe "{{ verify_probe.input }}" is Cowrie session {{ verify_probe.session }}

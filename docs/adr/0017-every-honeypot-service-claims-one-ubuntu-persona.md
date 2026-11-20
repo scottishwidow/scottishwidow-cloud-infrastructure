@@ -64,3 +64,7 @@ attempts for old CVEs.
   - OpenCanary MSSQL claims SQL Server 2012 on a Linux host.
   - The Sinkhole answers every DNS name with `1.1.1.1`.
   - The public IPv4 is in the Hetzner ASN.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make verify` is now `atmos workflow verify -f honeynet`.

@@ -83,3 +83,7 @@ and `tcp 443` to the Sinkhole, and Containment drops all other ports.
   no malware samples.
 - A change to the DNAT or the `input` rules replaces the Sensor. After the
   replacement, run `make configure` again.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f honeynet`.

@@ -8,6 +8,17 @@
   "customManagers": [
     {
       "customType": "regex",
+      "description": "Atmos version pinned in atmos.yaml",
+      "managerFilePatterns": ["/^atmos\\.yaml$/"],
+      "matchStrings": [
+        "require: \"(?<currentValue>\\d+\\.\\d+\\.\\d+)\""
+      ],
+      "depNameTemplate": "cloudposse/atmos",
+      "datasourceTemplate": "github-releases",
+      "extractVersionTemplate": "^v(?<version>.+)$"
+    },
+    {
+      "customType": "regex",
       "description": "Trivy checks bundle pinned in trivy.yaml",
       "managerFilePatterns": ["/^trivy\\.yaml$/"],
       "matchStrings": [

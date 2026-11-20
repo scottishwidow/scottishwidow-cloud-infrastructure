@@ -96,3 +96,7 @@ disable. Each module stops at the credential prompt.
   fingerprintable as a honeypot, which is accepted.
 - A new service means a new forwarded port, a Hetzner firewall rule and a Sensor
   replacement. It is a separate issue.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make verify` is now `atmos workflow verify -f honeynet`.
