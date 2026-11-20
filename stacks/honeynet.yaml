@@ -1,8 +1,12 @@
 import:
   - _honeynet-defaults
 
+env:
+  HCLOUD_TOKEN: !env HONEYNET_HCLOUD_TOKEN
+
 components:
   terraform:
+    hetzner/honeynet/bootstrap: {}
     aws/honeynet/corpus: {}
     hetzner/honeynet/network: {}
     hetzner/honeynet/sensor:

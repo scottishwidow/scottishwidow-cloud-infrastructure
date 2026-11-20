@@ -23,7 +23,7 @@ variable "sensor_private_ip" {
 }
 
 variable "honeypot_1_private_ip" {
-  description = "Private IP of honeypot-1. honeypot-N gets the Nth IP from it. The Makefile sets it for the sensor and honeypots roots"
+  description = "Private IP of honeypot-1. honeypot-N gets the Nth IP from it. The honeynet stack sets it for the sensor and honeypots roots"
   type        = string
 
   validation {
@@ -33,7 +33,7 @@ variable "honeypot_1_private_ip" {
 }
 
 variable "honeypot_port_redirects" {
-  description = "Public TCP ports that the Sensor forwards to another port on honeypot-1. Cowrie and OpenCanary listen on the mapped ports. The Makefile sets it for the sensor and honeypots roots"
+  description = "Public TCP ports that the Sensor forwards to another port on honeypot-1. Cowrie and OpenCanary listen on the mapped ports. The honeynet stack sets it for the sensor and honeypots roots"
   type        = map(number)
   default = {
     21 = 2121
@@ -44,13 +44,13 @@ variable "honeypot_port_redirects" {
 }
 
 variable "proxy_port" {
-  description = "Port of the allowlist proxy on the Sensor. The Docker daemon and apt on every Honeypot use it. The Makefile sets it for the sensor and honeypots roots"
+  description = "Port of the allowlist proxy on the Sensor. The Docker daemon and apt on every Honeypot use it. The honeynet stack sets it for the sensor and honeypots roots"
   type        = number
   default     = 3128
 }
 
 variable "collector_port" {
-  description = "TCP port of the Vector collector on the Sensor. Vector on every Honeypot sends Session Evidence to it. The Makefile sets it for the sensor and honeypots roots"
+  description = "TCP port of the Vector collector on the Sensor. Vector on every Honeypot sends Session Evidence to it. The honeynet stack sets it for the sensor and honeypots roots"
   type        = number
   default     = 6000
 }

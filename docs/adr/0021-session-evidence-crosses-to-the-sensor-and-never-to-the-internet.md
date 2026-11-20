@@ -43,3 +43,7 @@ writes the apt source list. No remote install script runs on a Honeypot.
   afterwards.
 - Containment does not change. The Containment assertions in the verification
   playbook must keep passing after the new ports are added.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f honeynet`.

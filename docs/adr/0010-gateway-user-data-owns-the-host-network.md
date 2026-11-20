@@ -35,3 +35,7 @@ public IP stays (ADR-0009), so a replacement costs nothing extra.
   replacement, run `make configure` again.
 - Terraform is the only source of the shared values (VPN network, port). Ansible
   reads them from the `ansible_inventory` output.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f hetzner-ovpn`.

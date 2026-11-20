@@ -1,0 +1,160 @@
+workflows:
+  apply:
+    description: Apply bootstrap, the Sensor CA, corpus, network, sensor, honeypots and hunt, in that order.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - &require_env
+        name: require-env
+        type: shell
+        command: |
+          : "${AWS_PROFILE:?AWS_PROFILE is not set}"
+          : "${HONEYNET_HCLOUD_TOKEN:?HONEYNET_HCLOUD_TOKEN is not set}"
+      - name: apply-bootstrap
+        command: terraform apply hetzner/honeynet/bootstrap
+      - name: sensor-ca
+        type: shell
+        working_directory: live/hetzner/honeynet
+        command: |
+          set -eu
+          if [ -f pki/ca.crt ]; then
+            echo "pki/ca.crt exists. The Sensor CA does not change."
+            exit 0
+          fi
+          mkdir -p pki
+          chmod 700 pki
+          openssl req -x509 -noenc -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
+            -keyout pki/ca.key -out pki/ca.crt.tmp -days 180 -sha256 \
+            -subj "/CN=honeynet-sensor-ca" \
+            -addext "basicConstraints=critical,CA:TRUE,pathlen:0" \
+            -addext "keyUsage=critical,keyCertSign,cRLSign"
+          chmod 600 pki/ca.key
+          mv pki/ca.crt.tmp pki/ca.crt
+      - name: apply-corpus
+        command: terraform apply aws/honeynet/corpus
+      - name: apply-network
+        command: terraform apply hetzner/honeynet/network
+      - name: apply-sensor
+        command: terraform apply hetzner/honeynet/sensor
+      - name: apply-honeypots
+        command: terraform apply hetzner/honeynet/honeypots
+      - &apply_hunt
+        name: apply-hunt
+        command: terraform apply aws/honeynet/hunt
+
+  destroy:
+    description: Destroy hunt, honeypots, sensor, network and bootstrap, then delete pki/. It never destroys corpus.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - *require_env
+      - name: destroy-hunt
+        command: terraform destroy aws/honeynet/hunt -- -refresh=false
+      - name: destroy-honeypots
+        command: terraform destroy hetzner/honeynet/honeypots -- -refresh=false
+      - name: destroy-sensor
+        command: terraform destroy hetzner/honeynet/sensor -- -refresh=false
+      - name: destroy-network
+        command: terraform destroy hetzner/honeynet/network -- -refresh=false
+      - name: destroy-bootstrap
+        command: terraform destroy hetzner/honeynet/bootstrap -- -refresh=false
+      - name: remove-pki
+        type: shell
+        working_directory: live/hetzner/honeynet
+        command: rm -rf pki
+
+  configure:
+    description: Write the Ansible inventory from the Terraform outputs, then run site.yml.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - *require_env
+      - name: init-sensor
+        command: terraform init hetzner/honeynet/sensor
+      - name: init-honeypots
+        command: terraform init hetzner/honeynet/honeypots
+      - name: init-corpus
+        command: terraform init aws/honeynet/corpus
+      - name: inventory
+        type: shell
+        working_directory: live/hetzner/honeynet/ansible
+        command: |
+          set -eu
+          atmos terraform output hetzner/honeynet/sensor -s honeynet --skip-init -- -json ansible_inventory > inventory/sensor.json.tmp
+          atmos terraform output hetzner/honeynet/honeypots -s honeynet --skip-init -- -json ansible_inventory > inventory/honeypots.json.tmp
+          atmos terraform output aws/honeynet/corpus -s honeynet --skip-init -- -json ansible_inventory > inventory/corpus.json.tmp
+          mv inventory/sensor.json.tmp inventory/sensor.json
+          mv inventory/honeypots.json.tmp inventory/honeypots.json
+          mv inventory/corpus.json.tmp inventory/corpus.json
+          rm -f .known_hosts
+      - name: site
+        type: shell
+        working_directory: live/hetzner/honeynet/ansible
+        command: ansible-playbook playbooks/site.yml
+
+  verify:
+    description: Run verify.yml against the Sensor and the Honeypots.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - *require_env
+      - name: verify
+        type: shell
+        working_directory: live/hetzner/honeynet/ansible
+        command: ansible-playbook playbooks/verify.yml
+
+  apply-hunt:
+    description: Apply the hunt root alone.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - &require_aws_profile
+        name: require-env
+        type: shell
+        command: ': "${AWS_PROFILE:?AWS_PROFILE is not set}"'
+      - *apply_hunt
+
+  configure-hunt:
+    description: Install DuckDB on the Hunt Host and create the normalising views.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - *require_aws_profile
+      - &init_hunt
+        name: init-hunt
+        command: terraform init aws/honeynet/hunt
+      - name: site
+        type: shell
+        working_directory: live/aws/honeynet/hunt/ansible
+        command: |
+          set -eu
+          SSM_SCRATCH_BUCKET="$(atmos terraform output aws/honeynet/hunt -s honeynet --skip-init -- -raw ssm_scratch_bucket_name)"
+          CORPUS_BUCKET="$(atmos terraform output aws/honeynet/hunt -s honeynet --skip-init -- -raw corpus_bucket_name)"
+          export SSM_SCRATCH_BUCKET CORPUS_BUCKET
+          ansible-playbook playbooks/site.yml
+
+  verify-hunt:
+    description: Run the Hunt verify.yml. Run the verify workflow first.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - *require_aws_profile
+      - *init_hunt
+      - name: verify
+        type: shell
+        working_directory: live/aws/honeynet/hunt/ansible
+        command: |
+          set -eu
+          SSM_SCRATCH_BUCKET="$(atmos terraform output aws/honeynet/hunt -s honeynet --skip-init -- -raw ssm_scratch_bucket_name)"
+          CORPUS_BUCKET="$(atmos terraform output aws/honeynet/hunt -s honeynet --skip-init -- -raw corpus_bucket_name)"
+          export SSM_SCRATCH_BUCKET CORPUS_BUCKET
+          ansible-playbook playbooks/verify.yml
+
+  destroy-corpus:
+    description: Destroy the corpus root alone. Empty the Corpus bucket first. Needs bootstrap and pki/.
+    stack: honeynet
+    working_directory: .
+    steps:
+      - *require_env
+      - name: destroy-corpus
+        command: terraform destroy aws/honeynet/corpus -- -refresh=false

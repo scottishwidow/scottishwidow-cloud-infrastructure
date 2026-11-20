@@ -1,3 +1,6 @@
+env:
+  HCLOUD_TOKEN: !env OVPN_HCLOUD_TOKEN
+
 components:
   terraform:
     hetzner/ovpn/network: {}

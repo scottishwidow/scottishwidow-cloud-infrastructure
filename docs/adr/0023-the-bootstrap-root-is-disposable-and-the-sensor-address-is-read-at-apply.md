@@ -66,3 +66,7 @@ trust policy. See the amendment to
 [ADR-0019](./0019-the-sensor-holds-no-long-lived-aws-credential.md). The
 consequence that the trust policy changes in each cycle now applies to the
 permission policy.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. The `honeynet` stack gives `HONEYNET_HCLOUD_TOKEN` to every root as `HCLOUD_TOKEN`, in its `env:` section.

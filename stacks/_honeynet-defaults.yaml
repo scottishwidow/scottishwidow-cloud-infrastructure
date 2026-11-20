@@ -1,14 +1,14 @@
-terraform:
-  vars:
-    honeypot_1_private_ip: "10.20.0.11"
-    proxy_port: 3128
-    honeypot_port_redirects:
-      "21": 2121
-      "22": 2222
-      "23": 2223
-      "80": 8080
-
 components:
   terraform:
-    hetzner/honeynet/sensor: {}
-    hetzner/honeynet/honeypots: {}
+    hetzner/honeynet/sensor:
+      vars: &sensor_and_honeypots_vars
+        honeypot_1_private_ip: "10.20.0.11"
+        proxy_port: 3128
+        collector_port: 6000
+        honeypot_port_redirects:
+          "21": 2121
+          "22": 2222
+          "23": 2223
+          "80": 8080
+    hetzner/honeynet/honeypots:
+      vars: *sensor_and_honeypots_vars

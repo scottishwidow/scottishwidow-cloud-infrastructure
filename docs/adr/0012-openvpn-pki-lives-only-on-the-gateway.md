@@ -28,3 +28,7 @@ exists only there. Ansible copies the client configs to the workstation, in
   work.
 - To keep client configs across recreates, move the PKI to a secret store and
   replace this decision.
+
+## Amendment, 2026-11-20
+
+Atmos workflows replace the Makefile. `make configure` is now `atmos workflow configure -f hetzner-ovpn`.

@@ -21,7 +21,7 @@ configuration.
 
 - The repository at a revision that declares the address in `bootstrap` and reads it in
   `sensor` through `data.hcloud_primary_ip.sensor`.
-- The environment the Makefile requires:
+- The environment the Honeynet stack requires:
 
   ```sh
   export AWS_PROFILE=personal-management
@@ -37,7 +37,8 @@ configuration.
 1. Initialise both roots and back up the current states:
 
    ```sh
-   make -C "$HONEYNET" init-bootstrap init-sensor
+   atmos terraform init hetzner/honeynet/bootstrap -s honeynet
+   atmos terraform init hetzner/honeynet/sensor -s honeynet
    terraform -chdir="$HONEYNET/sensor" state pull > "$WORK/sensor.tfstate"
    cp "$WORK/sensor.tfstate" "$WORK/sensor.tfstate.backup"
    cp "$HONEYNET/bootstrap/terraform.tfstate" "$WORK/bootstrap.tfstate.backup"
@@ -69,13 +70,14 @@ configuration.
    that replaces the IP or the Sensor is a failed move: stop and restore.
 
    ```sh
-   make -C "$HONEYNET" plan-bootstrap plan-sensor
+   atmos terraform plan hetzner/honeynet/bootstrap -s honeynet
+   atmos terraform plan hetzner/honeynet/sensor -s honeynet
    ```
 
 6. Apply `bootstrap`, then confirm that the address did not change:
 
    ```sh
-   make -C "$HONEYNET" apply-bootstrap
+   atmos terraform apply hetzner/honeynet/bootstrap -s honeynet
    terraform -chdir="$HONEYNET/bootstrap" output sensor_public_ipv4
    ```
 
@@ -102,8 +104,7 @@ Hetzner project, so recovery is one import. Read the ID from the Hetzner Console
 then:
 
 ```sh
-make -C "$HONEYNET" init-bootstrap
-terraform -chdir="$HONEYNET/bootstrap" import hcloud_primary_ip.sensor <id>
+atmos terraform import hetzner/honeynet/bootstrap -s honeynet hcloud_primary_ip.sensor <id>
 ```
 
 The SSH key is the second object in that state and imports by name.
