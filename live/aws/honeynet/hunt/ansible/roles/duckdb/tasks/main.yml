@@ -61,17 +61,39 @@
     group: root
     mode: "1777"
 
-- name: Install the DuckDB extensions that read the Corpus over S3
+# The DuckDB binary has no TLS client until httpfs loads, so INSTALL fetches over plain HTTP.
+# The Hunt Host allows only HTTPS egress. DuckDB checks the extension signature at LOAD.
+- name: Create the DuckDB extension directory for the pinned version
+  ansible.builtin.file:
+    path: "{{ duckdb_extension_install_directory }}"
+    state: directory
+    owner: root
+    group: root
+    mode: "0755"
+
+- name: Download the DuckDB extensions that read the Corpus over S3
+  ansible.builtin.get_url:
+    url: "{{ duckdb_extension_download_url }}/{{ item.name }}.duckdb_extension.gz"
+    checksum: "{{ item.checksum }}"
+    dest: "{{ duckdb_extension_install_directory }}/{{ item.name }}.duckdb_extension.gz"
+    owner: root
+    group: root
+    mode: "0644"
+  loop: "{{ duckdb_extensions }}"
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Unpack the DuckDB extensions
   ansible.builtin.command:
     argv:
-      - "{{ duckdb_path }}"
-      - -bail
-      - -c
-      - >-
-        SET extension_directory = '{{ duckdb_extension_directory }}';
-        INSTALL {{ item }};
-    creates: "{{ duckdb_extension_directory }}/v{{ duckdb_version }}/{{ duckdb_platform }}/{{ item }}.duckdb_extension"
+      - gzip
+      - --decompress
+      - --keep
+      - "{{ duckdb_extension_install_directory }}/{{ item.name }}.duckdb_extension.gz"
+    creates: "{{ duckdb_extension_install_directory }}/{{ item.name }}.duckdb_extension"
   loop: "{{ duckdb_extensions }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Write the session settings that every hunt session reads
   ansible.builtin.template:

@@ -130,6 +130,15 @@ Do the [prerequisites](../../../README.md#prerequisites) first. The Honeynet kee
    make verify     # runs verify.yml
    ```
 
+5. Configure and verify the Hunt Host:
+
+   ```sh
+   make configure-hunt  # installs DuckDB and creates the normalising views
+   make verify-hunt     # runs the Hunt verify.yml
+   ```
+
+   Run `make verify` before `make verify-hunt`. `make verify-hunt` reads the Session Evidence probe that `make verify` sends, and it finds only a probe from the last 7 days.
+
 The order is fixed:
 
 1. `make apply` generates the Sensor CA in `pki/` on the workstation, if it does not exist. The CA private key does not leave the workstation.
@@ -171,6 +180,7 @@ To move an address that an older revision created in the `sensor` root, follow [
 
 - **IDS or IPS.** Set `suricata_mode` in `ansible/playbooks/group_vars/all.yml`, then run `make configure`. nftables does not change.
 - **Rule updates.** A systemd timer runs `suricata-update` daily for ET Open.
+- **Hunt.** The Hunt Host is disposable. To start a hunt on its own, run `make apply-hunt configure-hunt`. To stop it, run `make destroy-hunt`. The Corpus does not change.
 
 ## Rules
 

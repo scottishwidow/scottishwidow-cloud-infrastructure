@@ -7,15 +7,19 @@ duckdb_download_checksum: sha256:1af0541e649a3ae34eb20eec2ca564308bf0e8993e5d6db
 duckdb_install_directory: /opt/duckdb/{{ duckdb_version }}
 duckdb_path: /usr/local/bin/duckdb
 
+duckdb_extension_download_url: https://extensions.duckdb.org/v{{ duckdb_version }}/{{ duckdb_platform }}
 duckdb_extensions:
-  - httpfs
-  - aws
+  - name: httpfs
+    checksum: sha256:b18472a0e85cbf15ca4ebbe335173f87b62a074cd0f26072d4c756205c6239d0
+  - name: aws
+    checksum: sha256:7be5627a03495959bc033755fe4184db6cbc1d391c16790d3dad06fc14c79606
 
 # The Hunt Host has 4 GB. The rest is for the OS and the SSM agent.
 duckdb_memory_limit: 2GB
 
 duckdb_state_directory: /var/lib/hunt
 duckdb_extension_directory: "{{ duckdb_state_directory }}/extensions"
+duckdb_extension_install_directory: "{{ duckdb_extension_directory }}/v{{ duckdb_version }}/{{ duckdb_platform }}"
 duckdb_spill_directory: "{{ duckdb_state_directory }}/spill"
 duckdb_database_path: "{{ duckdb_state_directory }}/hunt.duckdb"
 
