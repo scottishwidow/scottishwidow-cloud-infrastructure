@@ -1,0 +1,12 @@
+---
+corpus_views_path: "{{ duckdb_config_directory }}/views.sql"
+
+corpus_views_names:
+  - corpus_records
+  - suricata_records
+  - suricata_events
+  - suricata_alerts
+  - cowrie_records
+  - cowrie_events
+  - opencanary_records
+  - opencanary_events

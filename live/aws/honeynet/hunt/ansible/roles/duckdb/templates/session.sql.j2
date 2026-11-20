@@ -1,0 +1,15 @@
+.output /dev/null
+SET extension_directory = '{{ duckdb_extension_directory }}';
+SET autoinstall_known_extensions = false;
+SET memory_limit = '{{ duckdb_memory_limit }}';
+LOAD httpfs;
+LOAD aws;
+CREATE OR REPLACE SECRET {{ duckdb_corpus_secret_name }} (
+    TYPE s3,
+    PROVIDER credential_chain,
+    CHAIN 'instance',
+    REGION '{{ corpus_region }}',
+    SCOPE 's3://{{ corpus_bucket_name }}',
+    REFRESH auto
+);
+.output

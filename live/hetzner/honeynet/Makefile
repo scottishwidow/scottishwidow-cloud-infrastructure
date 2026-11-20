@@ -16,6 +16,8 @@ DIR_sensor     := sensor
 DIR_honeypots  := honeypots
 DIR_hunt       := ../../aws/honeynet/hunt
 
+HUNT_ANSIBLE_DIR := $(DIR_hunt)/ansible
+
 PKI_DIR          := pki
 CA_KEY           := $(PKI_DIR)/ca.key
 CA_CERT          := $(PKI_DIR)/ca.crt
@@ -32,7 +34,7 @@ export TF_VAR_collector_port := 6000
 export TF_VAR_honeypot_port_redirects := {"21":2121,"22":2222,"23":2223,"80":8080}
 
 .NOTPARALLEL:
-.PHONY: init apply destroy inventory configure verify
+.PHONY: init apply destroy inventory configure verify configure-hunt verify-hunt
 
 init: $(addprefix init-,$(APPLY_ORDER))
 apply: $(addprefix apply-,$(APPLY_ORDER))
@@ -68,6 +70,17 @@ verify:
 	$(call require_env)
 	cd ansible && $(ANSIBLE_PLAYBOOK) playbooks/verify.yml
 
+configure-hunt verify-hunt: export SSM_SCRATCH_BUCKET = $(shell $(TERRAFORM) -chdir=$(DIR_hunt) output -raw ssm_scratch_bucket_name)
+configure-hunt verify-hunt: export CORPUS_BUCKET = $(shell $(TERRAFORM) -chdir=$(DIR_hunt) output -raw corpus_bucket_name)
+
+configure-hunt:
+	$(call require_aws_profile)
+	cd $(HUNT_ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/site.yml
+
+verify-hunt:
+	$(call require_aws_profile)
+	cd $(HUNT_ANSIBLE_DIR) && $(ANSIBLE_PLAYBOOK) playbooks/verify.yml
+
 init-%:
 	$(call require_env)
 	$(TERRAFORM) -chdir=$(call stack_dir,$*) init -input=false $(TF_ARGS)
@@ -85,4 +98,5 @@ destroy-%:
 	$(TERRAFORM) -chdir=$(call stack_dir,$*) destroy -refresh=false $(TF_ARGS)
 
 stack_dir   = $(or $(DIR_$(1)),$(error Unknown stack '$(1)'. Allowed: $(ALL_STACKS)))
+require_aws_profile = $(if $(AWS_PROFILE),,$(error AWS_PROFILE is not set))
 require_env = $(foreach var,$(REQUIRED_ENV),$(if $($(var)),,$(error $(var) is not set)))

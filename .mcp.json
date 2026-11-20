@@ -13,5 +13,11 @@
         "${AWS_API_MCP_PROFILE_NAME}"
       ]
     }
+  },
+  "playwright": {
+    "command": "npx",
+    "args": [
+      "@playwright/mcp@latest"
+    ]
   }
 }

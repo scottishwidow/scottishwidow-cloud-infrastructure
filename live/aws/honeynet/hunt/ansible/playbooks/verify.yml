@@ -1,0 +1,211 @@
+---
+- name: Verify that a hunt reads the Corpus from the Hunt Host
+  hosts: hunt_hosts
+  gather_facts: false
+  become: false
+
+  vars_files:
+    - ../roles/duckdb/defaults/main.yml
+    - ../roles/corpus_views/defaults/main.yml
+
+  vars:
+    verify_suricata_glob: s3://{{ corpus_bucket_name }}/source=suricata/*/*/*
+    verify_view_names: "{{ verify_views.stdout | default('[]', true) | from_json | map(attribute='view_name') | list }}"
+    verify_latest_dt: "{{ (verify_latest_partition.stdout | default('[{}]', true) | from_json | first).dt | default('', true) }}"
+    verify_pruned: "{{ verify_pruned_read.stdout | default('[{}]', true) | from_json | first }}"
+    verify_secret: "{{ verify_corpus_secret.stdout | default('[{}]', true) | from_json | first }}"
+
+  tasks:
+    - name: List the views in the hunt database
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - SELECT view_name FROM duckdb_views() WHERE NOT internal ORDER BY view_name;
+      register: verify_views
+      changed_when: false
+      failed_when: false
+
+    - name: Open each view against the Corpus
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -bail
+          - -c
+          - DESCRIBE {{ item }};
+      loop: "{{ corpus_views_names }}"
+      register: verify_view_open
+      changed_when: false
+      failed_when: false
+
+    - name: Require every normalising view to open
+      ansible.builtin.assert:
+        that:
+          - verify_views.rc == 0
+          - verify_view_names | sort == corpus_views_names | sort
+          - verify_view_open.results | rejectattr('rc', 'equalto', 0) | list | length == 0
+        fail_msg: >-
+          The hunt database does not open as expected. Views found: {{ verify_view_names }}.
+          Expected: {{ corpus_views_names }}. Views that do not open:
+          {{ verify_view_open.results | rejectattr('rc', 'equalto', 0) | map(attribute='item') | list }}.
+          {{ verify_views.stderr | default('') }}
+          {{ verify_view_open.results | map(attribute='stderr') | select | list }}
+        success_msg: All {{ corpus_views_names | length }} normalising views open.
+
+    - name: Find the latest Suricata partition from the Corpus listing
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - >-
+            SELECT max(regexp_extract(file, '/dt=([0-9]{4}-[0-9]{2}-[0-9]{2})/', 1)) AS dt
+            FROM glob('{{ verify_suricata_glob }}');
+      register: verify_latest_partition
+      changed_when: false
+      failed_when: false
+
+    - name: Require a Suricata partition in the Corpus
+      ansible.builtin.assert:
+        that:
+          - verify_latest_partition.rc == 0
+          - verify_latest_dt | length > 0
+        fail_msg: >-
+          No Suricata partition was found under {{ verify_suricata_glob }}. Ship
+          Suricata telemetry to the Corpus before this run.
+          {{ verify_latest_partition.stderr | default('') }}
+        success_msg: The latest Suricata partition is dt={{ verify_latest_dt }}.
+
+    - name: Read one Suricata partition through the view and log the S3 requests
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+        stdin: |
+          .output /dev/null
+          CALL enable_logging('HTTP');
+          SET VARIABLE verify_records = (SELECT count(*) FROM suricata_events WHERE dt = DATE '{{ verify_latest_dt }}');
+          .output
+          SELECT
+              getvariable('verify_records') AS records,
+              count(*) FILTER (WHERE regexp_matches(request.url, '/dt(=|%3D){{ verify_latest_dt }}/')) AS partition_requests,
+              count(*) FILTER (WHERE NOT regexp_matches(request.url, '/dt(=|%3D){{ verify_latest_dt }}/')) AS other_partition_requests
+          FROM duckdb_logs_parsed('HTTP')
+          WHERE regexp_matches(request.url, '/source(=|%3D)suricata/')
+            AND request.url NOT LIKE '%list-type=%';
+      register: verify_pruned_read
+      changed_when: false
+      failed_when: false
+
+    - name: Read which secret signs the Corpus requests
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - >-
+            SELECT name, provider
+            FROM which_secret('s3://{{ corpus_bucket_name }}/source=suricata/', 's3');
+      register: verify_corpus_secret
+      changed_when: false
+      failed_when: false
+
+    - name: Require the Suricata view to return rows read through the instance profile
+      ansible.builtin.assert:
+        that:
+          - verify_corpus_secret.rc == 0
+          - verify_secret.name | default('') == duckdb_corpus_secret_name
+          - verify_secret.provider | default('') == 'credential_chain'
+          - verify_pruned_read.rc == 0
+          - verify_pruned.records | default(0) | int > 0
+        fail_msg: >-
+          The Suricata view did not return rows from dt={{ verify_latest_dt }} through the
+          instance profile. Secret: {{ verify_secret }}. Read: {{ verify_pruned }}.
+          {{ verify_corpus_secret.stderr | default('') }}
+          {{ verify_pruned_read.stderr | default('') }}
+        success_msg: >-
+          suricata_events returned {{ verify_pruned.records }} rows from dt={{ verify_latest_dt }},
+          signed by the {{ duckdb_corpus_secret_name }} secret from the instance profile.
+
+    - name: Require a query that filters on dt to read only that partition
+      ansible.builtin.assert:
+        that:
+          - verify_pruned.partition_requests | default(0) | int > 0
+          - verify_pruned.other_partition_requests | default(-1) | int == 0
+        fail_msg: >-
+          The query on dt={{ verify_latest_dt }} sent {{ verify_pruned.partition_requests | default('no') }}
+          object requests to that partition and {{ verify_pruned.other_partition_requests | default('an unknown number of') }}
+          to other partitions.
+        success_msg: >-
+          The query on dt={{ verify_latest_dt }} sent {{ verify_pruned.partition_requests }} object
+          requests, all to that partition.
+
+- name: Verify that the Operator reads the Corpus from the workstation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  become: false
+
+  vars:
+    verify_hunt_host: "{{ hostvars[groups['hunt_hosts'] | first] }}"
+    corpus_bucket_name: "{{ verify_hunt_host.corpus_bucket_name }}"
+    corpus_region: "{{ verify_hunt_host.corpus_region }}"
+
+  tasks:
+    - name: Find a Suricata object with the Operator profile from the workstation
+      ansible.builtin.command:
+        argv:
+          - aws
+          - --region
+          - "{{ corpus_region }}"
+          - s3api
+          - list-objects-v2
+          - --bucket
+          - "{{ corpus_bucket_name }}"
+          - --prefix
+          - source=suricata/host=
+          - --max-items
+          - "1"
+          - --query
+          - Contents[0].Key
+          - --output
+          - text
+      register: verify_workstation_list
+      changed_when: false
+      failed_when: false
+
+    - name: Read the Suricata object with the Operator profile from the workstation
+      ansible.builtin.command:
+        argv:
+          - aws
+          - --region
+          - "{{ corpus_region }}"
+          - s3api
+          - get-object
+          - --bucket
+          - "{{ corpus_bucket_name }}"
+          - --key
+          - "{{ verify_workstation_list.stdout | trim }}"
+          - /dev/null
+      register: verify_workstation_read
+      changed_when: false
+      failed_when: false
+      when:
+        - verify_workstation_list.rc == 0
+        - verify_workstation_list.stdout | trim not in ['', 'None']
+
+    - name: Require Corpus access from the workstation with the Operator profile
+      ansible.builtin.assert:
+        that:
+          - verify_workstation_list.rc == 0
+          - verify_workstation_read.rc | default(1) == 0
+        fail_msg: >-
+          The Operator profile cannot list and read the Corpus from the workstation.
+          {{ verify_workstation_list.stderr | default('') }}
+          {{ verify_workstation_read.stderr | default('') }}
+        success_msg: The Operator profile reads {{ verify_workstation_list.stdout | trim }} from the workstation.

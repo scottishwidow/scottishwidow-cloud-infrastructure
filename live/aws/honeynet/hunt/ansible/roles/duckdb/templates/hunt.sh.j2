@@ -1,0 +1,10 @@
+#!/bin/bash
+set -euo pipefail
+
+spill_directory="$(mktemp --directory --tmpdir={{ duckdb_spill_directory }} "$(id -un).XXXXXXXX")"
+trap 'rm -rf -- "${spill_directory}"' EXIT
+
+{{ duckdb_path }} -readonly \
+  -cmd ".read {{ duckdb_session_path }}" \
+  -cmd "SET temp_directory = '${spill_directory}';" \
+  {{ duckdb_database_path }} "$@"
