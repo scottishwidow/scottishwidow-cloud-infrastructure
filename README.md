@@ -100,8 +100,8 @@ atmos terraform plan aws/management/network -s aws-management
 atmos terraform apply hetzner/ovpn/openvpn -s hetzner-ovpn
 ```
 
-The `bootstrap` roots and `jenkins` have no stack entry. Run them with plain
-Terraform, as in [Bootstrap a new state bucket](#bootstrap-a-new-state-bucket).
+The `bootstrap` roots have no stack entry. Run them with plain Terraform, as
+in [Bootstrap a new state bucket](#bootstrap-a-new-state-bucket).
 
 ## OVPN provisioning
 
