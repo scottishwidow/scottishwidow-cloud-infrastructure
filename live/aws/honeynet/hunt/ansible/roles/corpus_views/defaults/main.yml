@@ -6,7 +6,10 @@ corpus_views_names:
   - suricata_records
   - suricata_events
   - suricata_alerts
+  - suricata_flows
   - cowrie_records
   - cowrie_events
   - opencanary_records
   - opencanary_events
+  - honeypot_sessions
+  - flow_sessions
