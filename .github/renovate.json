@@ -8,22 +8,35 @@
   "customManagers": [
     {
       "customType": "regex",
-      "description": "Trivy CLI version used by trivy-action",
-      "managerFilePatterns": ["/^\\.github/workflows/[^/]+\\.ya?ml$/"],
-      "matchStrings": [
-        "uses: aquasecurity/trivy-action@[^\\n]+\\n(?:\\s+[^\\n]*\\n)*?\\s+version: '(?<currentValue>v[^']+)'"
-      ],
-      "depNameTemplate": "aquasecurity/trivy",
-      "datasourceTemplate": "github-releases"
-    },
-    {
-      "customType": "regex",
       "description": "Trivy checks bundle pinned in trivy.yaml",
       "managerFilePatterns": ["/^trivy\\.yaml$/"],
       "matchStrings": [
         "checks-bundle-repository: (?<depName>ghcr\\.io/aquasecurity/trivy-checks):(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]+)"
       ],
       "datasourceTemplate": "docker"
+    },
+    {
+      "customType": "regex",
+      "description": "Container images pinned in Ansible role defaults",
+      "managerFilePatterns": ["/(^|/)roles/[^/]+/defaults/main\\.ya?ml$/"],
+      "matchStrings": [
+        "_image: (?<depName>[^\\s:@]+):(?<currentValue>[^\\s:@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?"
+      ],
+      "autoReplaceStringTemplate": "_image: {{{depName}}}:{{{newValue}}}{{#if newDigest}}@{{{newDigest}}}{{/if}}",
+      "datasourceTemplate": "docker"
+    }
+  ],
+  "packageRules": [
+    {
+      "description": "Pin Ansible role container images to a digest",
+      "matchManagers": ["custom.regex"],
+      "matchFileNames": ["**/roles/*/defaults/main.{yml,yaml}"],
+      "pinDigests": true
+    },
+    {
+      "description": "Nextcloud AIO updates its own mastercontainer and must stay on latest",
+      "matchPackageNames": ["nextcloud/all-in-one"],
+      "enabled": false
     }
   ]
 }
