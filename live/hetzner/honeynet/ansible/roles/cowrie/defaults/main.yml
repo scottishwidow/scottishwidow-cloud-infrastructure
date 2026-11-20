@@ -1,5 +1,5 @@
 ---
-cowrie_image: cowrie/cowrie:3.1.1
+cowrie_image: cowrie/cowrie:3.1.7@sha256:e7c4b4fe5fbb874e682c6c0c7a1daf1c3183c622d5cc2d281f453c1c4d9f97ac
 
 cowrie_dir: /opt/cowrie
 
