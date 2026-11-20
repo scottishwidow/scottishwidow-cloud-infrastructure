@@ -21,12 +21,15 @@ flowchart LR
                 subgraph nft["nftables (user data)"]
                     dnat["prerouting DNAT<br/>public ports to honeypot-1<br/>Honeypot 80/443/53 out to Sinkhole"]
                     fwd["forward chain<br/>1. Containment drop<br/>2. queue 0 bypass<br/>3. established accept"]
-                    inp["input chain<br/>queue 0 bypass for Sinkhole flows<br/>proxy and Sinkhole ports from Honeynet only"]
+                    inp["input chain<br/>queue 0 bypass for Sinkhole flows<br/>proxy, collector, NTP and Sinkhole ports<br/>from Honeynet only"]
                 end
                 suricata["Suricata<br/>IDS: af-packet / IPS: NFQUEUE 0<br/>ET Open + local rules"]
                 evebox["EveBox<br/>127.0.0.1:5636"]
                 logvol[("Log Volume<br/>/srv/honeynet")]
                 squid["Squid allowlist proxy<br/>10.20.0.2:3128"]
+                vector_s["Vector<br/>collector :6000<br/>disk buffers"]
+                signer["aws_signing_helper<br/>Sensor certificate"]
+                chrony["chrony<br/>NTP udp 123"]
                 subgraph sink["Sinkhole (rootless Podman)"]
                     nginx["nginx<br/>:10080 HTTP, :10443 HTTPS<br/>200 + empty shell script"]
                     coredns["CoreDNS<br/>:10053<br/>A = 1.1.1.1, AAAA empty"]
@@ -40,8 +43,16 @@ flowchart LR
                 dark["tcp 445<br/>Dark Port, dropped"]
                 sshd_h["sshd :22<br/>from 10.20.0.2 only"]
                 dockerd["Docker daemon<br/>DNS 8.8.8.8, proxy :3128"]
+                vector_h["Vector<br/>disk buffer"]
+                timesyncd["timesyncd<br/>Sensor only"]
             end
         end
+    end
+
+    subgraph aws["AWS"]
+        rolesanywhere["IAM Roles Anywhere<br/>trust anchor = Sensor CA<br/>writer role"]
+        corpus[("Corpus bucket<br/>source= / host= / dt=<br/>13 months")]
+        hunt["Hunt Host (t4g.medium)<br/>DuckDB, hunt command<br/>no inbound ports"]
     end
 
     upstream["Allowlisted mirrors<br/>Ubuntu, Hetzner, Docker"]
@@ -70,14 +81,28 @@ flowchart LR
     dockerd -->|"apt, image pulls"| squid
     squid --> upstream
     fwd -->|"any other new<br/>outbound: DROP"| blocked(["Dropped<br/>Containment"])
+
+    cowrie -->|"cowrie.json"| vector_h
+    canary -->|"opencanary.log"| vector_h
+    vector_h -->|"Session Evidence<br/>tcp 6000"| inp
+    inp --> vector_s
+    timesyncd -->|"udp 123"| inp
+    inp --> chrony
+    logvol -->|"eve.json"| vector_s
+    vector_s -. "credential process" .-> signer
+    signer -->|"HTTPS 443"| rolesanywhere
+    vector_s -->|"HTTPS 443<br/>gzip NDJSON"| corpus
+    hunt -->|"HTTPS 443<br/>read only"| corpus
+    operator -->|"SSM session"| hunt
 ```
 
 ## Hosts
 
 | Host | Address | Runs |
 |---|---|---|
-| Sensor | Public IPv4, `10.20.0.2` | nftables, Suricata, EveBox, Squid, Sinkhole (nginx, CoreDNS) |
-| `honeypot-1` | `10.20.0.11`, no public IP | Cowrie, OpenCanary, in Docker |
+| Sensor | Public IPv4, `10.20.0.2` | nftables, Suricata, EveBox, Squid, Sinkhole (nginx, CoreDNS), Vector, `aws_signing_helper`, chrony |
+| `honeypot-1` | `10.20.0.11`, no public IP | Cowrie and OpenCanary in Docker, Vector, timesyncd |
+| Hunt Host | AWS VPC public subnet, no inbound ports | DuckDB, the `hunt` command |
 
 The Log Volume is attached to the Sensor at `/srv/honeynet`. It holds `/var/log/suricata` and `/var/lib/evebox`, and it stays when Terraform replaces the Sensor.
 
@@ -92,6 +117,10 @@ Every packet between the internet and a Honeypot goes through the Sensor. The Ho
 | Honeypot HTTP, HTTPS or DNS to the internet | Sensor DNAT to the Sinkhole | The Sinkhole answers. Nothing leaves the Honeynet. |
 | Honeypot apt and image pulls | Squid on `10.20.0.2:3128` | Allowlisted domains only. |
 | Operator SSH | Sensor `:2222`, then ProxyCommand to Honeypot `:22` | Key only, from `admin_cidrs`. |
+| Session Evidence | Honeypot Vector to Sensor Vector on `10.20.0.2:6000` | The Sensor forwards records from known sources and hosts only. |
+| Telemetry to the Corpus | Sensor Vector to S3 over HTTPS, with Roles Anywhere credentials | Gzip objects under `source=/host=/dt=`, kept 13 months. |
+| Honeypot time | timesyncd to chrony on Sensor `udp 123` | The Honeypot ignores time servers from DHCP. |
+| Hunt | Operator SSM session to the Hunt Host. DuckDB reads the Corpus over HTTPS. | Read only. The Hunt Host accepts no inbound connections. |
 
 Suricata sees all forwarded and Sinkhole flows. In IPS mode, `bypass` makes the Sensor fail open when Suricata does not read the queue. Containment does not depend on Suricata.
 
