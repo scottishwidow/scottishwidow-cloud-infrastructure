@@ -77,9 +77,9 @@ flowchart LR
 | Host | Address | Runs |
 |---|---|---|
 | Sensor | Public IPv4, `10.20.0.2` | nftables, Suricata, EveBox, Squid, Sinkhole (nginx, CoreDNS) |
+| `honeypot-1` | `10.20.0.11`, no public IP | Cowrie, OpenCanary, in Docker |
 
 The Log Volume is attached to the Sensor at `/srv/honeynet`. It holds `/var/log/suricata` and `/var/lib/evebox`, and it stays when Terraform replaces the Sensor.
-| `honeypot-1` | `10.20.0.11`, no public IP | Cowrie, OpenCanary, in Docker |
 
 Every packet between the internet and a Honeypot goes through the Sensor. The Honeypot default route goes to the Hetzner network gateway. The network route sends it to the Sensor.
 
@@ -106,6 +106,32 @@ Suricata sees all forwarded and Sinkhole flows. In IPS mode, `bypass` makes the 
 | 1433 | 1433 | OpenCanary MSSQL |
 | 3306 | 3306 | OpenCanary MySQL |
 | 445 | 445 | Dark Port, no service |
+
+## Terraform roots
+
+| Root | Stack component | Owns |
+|---|---|---|
+| `bootstrap/` | `hetzner/honeynet/bootstrap` | The Hetzner SSH key and the Sensor public IPv4. It keeps its state locally. |
+| `live/aws/honeynet/corpus/` | `aws/honeynet/corpus` | The Corpus bucket, the Sensor writer role and the Roles Anywhere trust anchor |
+| `network/` | `hetzner/honeynet/network` | The network `10.20.0.0/24` and its route to the Sensor |
+| `sensor/` | `hetzner/honeynet/sensor` | The Sensor, its firewall and the Log Volume |
+| `honeypots/` | `hetzner/honeynet/honeypots` | `honeypot-1` |
+| `live/aws/honeynet/hunt/` | `aws/honeynet/hunt` | The Hunt Host, its VPC and its scratch bucket |
+
+## Workflows
+
+The workflows are in `stacks/workflows/honeynet.yaml`. All workflows need `AWS_PROFILE`. All workflows except `apply-hunt`, `configure-hunt` and `verify-hunt` also need `HONEYNET_HCLOUD_TOKEN`.
+
+| Workflow | Does |
+|---|---|
+| `apply` | Applies `bootstrap`, generates the Sensor CA, then applies `corpus`, `network`, `sensor`, `honeypots` and `hunt`, in that order. |
+| `destroy` | Destroys `hunt`, `honeypots`, `sensor`, `network` and `bootstrap`, in that order, then deletes `pki/`. It never destroys `corpus`. |
+| `configure` | Writes the inventory from the Terraform outputs, then runs `site.yml`. |
+| `verify` | Runs `verify.yml` against the Sensor and the Honeypots. |
+| `apply-hunt` | Applies `hunt` alone. |
+| `configure-hunt` | Installs DuckDB on the Hunt Host and creates the normalising views. |
+| `verify-hunt` | Runs the Hunt `verify.yml`. Run `verify` first. |
+| `destroy-corpus` | Destroys `corpus` alone. See [Full teardown](#full-teardown). |
 
 ## Provisioning
 
