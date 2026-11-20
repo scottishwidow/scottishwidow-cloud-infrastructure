@@ -53,3 +53,15 @@
   ADR-0008 draws. `main` has no agent and no `docs/design/` while triage is
   archived. If triage is restored, its corpus assembler is the one place the line
   could be quietly crossed — it may contain code and never prose.
+
+## Shared language
+
+These terms apply to every context.
+
+**Durable root**:
+A root that outlives a Teardown of its environment. No destroy workflow contains it.
+_Avoid_: Persistent root, permanent root, protected root
+
+**Teardown**:
+The destruction of every root of one environment that is not a Durable root.
+_Avoid_: Decommission, cleanup
