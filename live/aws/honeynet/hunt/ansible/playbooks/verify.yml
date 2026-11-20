@@ -13,6 +13,13 @@
     verify_view_names: "{{ verify_views.stdout | default('[]', true) | from_json | map(attribute='view_name') | list }}"
     verify_latest_dt: "{{ (verify_latest_partition.stdout | default('[{}]', true) | from_json | first).dt | default('', true) }}"
     verify_pruned: "{{ verify_pruned_read.stdout | default('[{}]', true) | from_json | first }}"
+    verify_probe_lookback_days: 7
+    verify_probe: "{{ verify_probe_session.stdout | default('[{}]', true) | from_json | first }}"
+    verify_probe_flow: "{{ verify_probe_join.stdout | default('[{}]', true) | from_json | first }}"
+    # Suricata logs a flow only after the flow times out, and Vector then batches it.
+    verify_flow_delivery_retries: 60
+    verify_flow_delivery_delay: 10
+    verify_retention_scan_timeout_seconds: 3600
     verify_secret: "{{ verify_corpus_secret.stdout | default('[{}]', true) | from_json | first }}"
 
   tasks:
@@ -144,6 +151,139 @@
         success_msg: >-
           The query on dt={{ verify_latest_dt }} sent {{ verify_pruned.partition_requests }} object
           requests, all to that partition.
+
+    - name: Count the tables in the hunt database
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - SELECT count(*) AS tables FROM duckdb_tables();
+      register: verify_tables
+      changed_when: false
+      failed_when: false
+
+    - name: Require a hunt database that holds views only
+      ansible.builtin.assert:
+        that:
+          - verify_tables.rc == 0
+          - (verify_tables.stdout | default('[{}]', true) | from_json | first).tables | default(-1) | int == 0
+        fail_msg: >-
+          The hunt database holds tables, so a rewritten view does not re-run over the stored
+          records alone. {{ verify_tables.stdout | default('') }} {{ verify_tables.stderr | default('') }}
+        success_msg: >-
+          The hunt database holds views only. A rewritten view re-runs over the stored records
+          with no reprocessing.
+
+    - name: Find the latest Session Evidence probe of the Honeynet verification run
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - >-
+            SELECT session, host, dt, input
+            FROM cowrie_events
+            WHERE dt >= current_date - {{ verify_probe_lookback_days }}
+              AND event_id = 'cowrie.command.input'
+              AND regexp_full_match(input, 'echo session-evidence-[0-9]+')
+            ORDER BY event_time DESC
+            LIMIT 1;
+      register: verify_probe_session
+      changed_when: false
+      failed_when: false
+
+    - name: Require a Session Evidence probe in the Corpus
+      ansible.builtin.assert:
+        that:
+          - verify_probe_session.rc == 0
+          - verify_probe.session | default('') | length > 0
+        fail_msg: >-
+          No Cowrie session of the Honeynet verification run was found in the last
+          {{ verify_probe_lookback_days }} days. Run `make verify` before this run.
+          {{ verify_probe_session.stderr | default('') }}
+        success_msg: >-
+          The probe "{{ verify_probe.input }}" is Cowrie session {{ verify_probe.session }}
+          on {{ verify_probe.host }}, dt={{ verify_probe.dt }}.
+
+    - name: Join the Suricata flow to the probe session
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - >-
+            SELECT
+                count(*) AS flows,
+                any_value(flow_id) AS flow_id,
+                any_value(src_ip) AS src_ip,
+                any_value(src_port) AS src_port,
+                round(any_value(epoch(session_start) - epoch(flow_start)), 3) AS session_start_offset_seconds
+            FROM flow_sessions
+            WHERE dt = DATE '{{ verify_probe.dt }}'
+              AND host = '{{ verify_probe.host | replace("'", "''") }}'
+              AND source = 'cowrie'
+              AND session_id = '{{ verify_probe.session | replace("'", "''") }}';
+      register: verify_probe_join
+      changed_when: false
+      failed_when: false
+      retries: "{{ verify_flow_delivery_retries }}"
+      delay: "{{ verify_flow_delivery_delay }}"
+      until: verify_probe_flow.flows | default(0) | int > 0
+
+    - name: Require the join to return the Suricata flow of the probe session
+      ansible.builtin.assert:
+        that:
+          - verify_probe_join.rc == 0
+          - verify_probe_flow.flows | default(0) | int > 0
+        fail_msg: >-
+          flow_sessions returned no Suricata flow for Cowrie session {{ verify_probe.session }}
+          on {{ verify_probe.host }}, dt={{ verify_probe.dt }}. Result: {{ verify_probe_flow }}.
+          {{ verify_probe_join.stderr | default('') }}
+        success_msg: >-
+          flow_sessions joins Suricata flow {{ verify_probe_flow.flow_id }} from
+          {{ verify_probe_flow.src_ip }}:{{ verify_probe_flow.src_port }} to Cowrie session
+          {{ verify_probe.session }}. The session starts {{ verify_probe_flow.session_start_offset_seconds }} s
+          after the flow.
+
+    - name: Count every Corpus record in the last 13 months
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - >-
+            SELECT
+                count(DISTINCT (source, host, dt)) AS partitions,
+                count(*) AS records,
+                min(dt) AS first_dt,
+                max(dt) AS last_dt
+            FROM corpus_records
+            WHERE dt > current_date - INTERVAL 13 MONTH;
+      register: verify_retention_scan
+      changed_when: false
+      failed_when: false
+      async: "{{ verify_retention_scan_timeout_seconds }}"
+      poll: 15
+
+    - name: Require the 13-month aggregation to complete on the Hunt Host
+      vars:
+        verify_retention: "{{ verify_retention_scan.stdout | default('[{}]', true) | from_json | first }}"
+      ansible.builtin.assert:
+        that:
+          - verify_retention_scan.rc | default(1) == 0
+          - verify_retention.records | default(0) | int > 0
+        fail_msg: >-
+          The aggregation across 13 months of partitions did not complete within
+          {{ verify_retention_scan_timeout_seconds }} s and {{ duckdb_memory_limit }} of memory.
+          {{ verify_retention_scan.msg | default('') }} {{ verify_retention_scan.stderr | default('') }}
+        success_msg: >-
+          The aggregation read {{ verify_retention.records }} records from {{ verify_retention.partitions }}
+          partitions, dt={{ verify_retention.first_dt }} to dt={{ verify_retention.last_dt }}.
 
 - name: Verify that the Operator reads the Corpus from the workstation
   hosts: localhost

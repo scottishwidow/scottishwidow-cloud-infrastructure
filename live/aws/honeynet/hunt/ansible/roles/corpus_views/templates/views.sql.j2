@@ -86,6 +86,32 @@ SELECT
 FROM suricata_events
 WHERE event_type = 'alert';
 
+CREATE VIEW suricata_flows AS
+SELECT
+    event_time,
+    flow_id,
+    community_id,
+    src_ip,
+    src_port,
+    dest_ip,
+    dest_port,
+    proto,
+    app_proto,
+    try_strptime(record->>'$.flow.start', '%Y-%m-%dT%H:%M:%S.%f%z') AS flow_start,
+    try_strptime(record->>'$.flow.end', '%Y-%m-%dT%H:%M:%S.%f%z') AS flow_end,
+    record->>'$.flow.state' AS flow_state,
+    record->>'$.flow.reason' AS flow_end_reason,
+    TRY_CAST(record->>'$.flow.pkts_toserver' AS BIGINT) AS packets_to_server,
+    TRY_CAST(record->>'$.flow.pkts_toclient' AS BIGINT) AS packets_to_client,
+    TRY_CAST(record->>'$.flow.bytes_toserver' AS BIGINT) AS bytes_to_server,
+    TRY_CAST(record->>'$.flow.bytes_toclient' AS BIGINT) AS bytes_to_client,
+    record,
+    host,
+    dt,
+    object_key
+FROM suricata_events
+WHERE event_type = 'flow';
+
 CREATE VIEW cowrie_records AS
 SELECT
     json AS record,
@@ -141,3 +167,85 @@ SELECT
     dt,
     object_key
 FROM opencanary_records;
+
+-- A Honeypot session is one connection from an attacker to a Honeypot, for each
+-- dt partition it has records in. Cowrie names its sessions. OpenCanary does
+-- not, so its session is one source address and port.
+CREATE VIEW honeypot_sessions AS
+SELECT
+    'cowrie' AS source,
+    session AS session_id,
+    any_value(protocol) AS protocol,
+    any_value(src_ip) AS src_ip,
+    max(src_port) AS src_port,
+    max(dest_ip) AS dest_ip,
+    max(dest_port) AS dest_port,
+    min(event_time) AS session_start,
+    max(event_time) AS session_end,
+    count(*) AS records,
+    host,
+    dt
+FROM cowrie_events
+WHERE session IS NOT NULL
+GROUP BY host, dt, session
+UNION ALL
+SELECT
+    'opencanary' AS source,
+    NULL AS session_id,
+    NULL AS protocol,
+    src_ip,
+    src_port,
+    any_value(dest_ip) AS dest_ip,
+    dest_port,
+    min(event_time) AS session_start,
+    max(event_time) AS session_end,
+    count(*) AS records,
+    host,
+    dt
+FROM opencanary_events
+WHERE src_port > 0
+GROUP BY host, dt, src_ip, src_port, dest_port;
+
+-- The join contract is src_ip, src_port and a 5-second window. The Sensor DNAT
+-- rewrites the destination only, so the attacker address and port reach the
+-- Honeypot unchanged. The window is at least five times the clock skew that the
+-- Honeynet verification run asserts.
+--
+-- The flow and the session must also have the same dt. Then a filter on dt
+-- prunes the partitions of both sources. A flow that starts on one UTC date and
+-- a session that starts on the next date do not join.
+CREATE VIEW flow_sessions AS
+SELECT
+    flow.flow_id,
+    flow.community_id,
+    flow.flow_start,
+    flow.flow_end,
+    flow.src_ip,
+    flow.src_port,
+    flow.dest_ip AS flow_dest_ip,
+    flow.dest_port AS flow_dest_port,
+    flow.proto,
+    flow.app_proto,
+    flow.flow_state,
+    flow.packets_to_server,
+    flow.packets_to_client,
+    flow.bytes_to_server,
+    flow.bytes_to_client,
+    flow.host AS sensor_host,
+    flow.object_key AS flow_object_key,
+    session.source,
+    session.session_id,
+    session.protocol,
+    session.dest_ip AS honeypot_ip,
+    session.dest_port AS honeypot_port,
+    session.session_start,
+    session.session_end,
+    session.records AS session_records,
+    session.host,
+    flow.dt
+FROM suricata_flows AS flow
+JOIN honeypot_sessions AS session
+    ON session.dt = flow.dt
+    AND session.src_ip = flow.src_ip
+    AND session.src_port = flow.src_port
+    AND session.session_start BETWEEN flow.flow_start - INTERVAL 5 SECOND AND flow.flow_end + INTERVAL 5 SECOND;
