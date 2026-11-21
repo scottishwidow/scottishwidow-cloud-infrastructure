@@ -13,7 +13,7 @@ If any of these files don't exist, **proceed silently**. Don't flag their absenc
 
 This is a multi-context repo (monorepo). `CONTEXT-MAP.md` at the root points to per-context `CONTEXT.md` files:
 
-```
+```text
 /
 ├── CONTEXT-MAP.md
 ├── docs/adr/                          ← all decisions

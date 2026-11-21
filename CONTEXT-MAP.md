@@ -60,8 +60,8 @@ These terms apply to every context.
 
 **Durable root**:
 A root that outlives a Teardown of its environment. No destroy workflow contains it.
-_Avoid_: Persistent root, permanent root, protected root
+*Avoid*: Persistent root, permanent root, protected root
 
 **Teardown**:
 The destruction of every root of one environment that is not a Durable root.
-_Avoid_: Decommission, cleanup
+*Avoid*: Decommission, cleanup

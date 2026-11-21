@@ -5,7 +5,7 @@ The Management environment is the `management` AWS environment. It hosts the Nex
 ## Terraform roots
 
 | Root | Stack component | Owns |
-|---|---|---|
+| --- | --- | --- |
 | `bootstrap/` | None | The state bucket `tf-state-scottishwidow-management` and its access-log bucket |
 | `network/` | `aws/management/network` | The VPC, subnets, routes and internet gateway |
 | `nextcloud/` | `aws/management/nextcloud` | The Nextcloud instance, its Elastic IP and security group, the backup policy and the scratch bucket |
@@ -17,7 +17,7 @@ The Management environment is the `management` AWS environment. It hosts the Nex
 The workflows are in `stacks/workflows/aws-management.yaml`. They need `AWS_PROFILE`.
 
 | Workflow | Does |
-|---|---|
+| --- | --- |
 | `apply` | Applies `network` and `nextcloud`, in that order. |
 | `configure` | Reads the scratch bucket from the `nextcloud` outputs, then runs `nextcloud-aio.yml`. |
 

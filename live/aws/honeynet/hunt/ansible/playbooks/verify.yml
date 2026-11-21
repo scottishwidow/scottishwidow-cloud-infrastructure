@@ -83,7 +83,8 @@
         fail_msg: >-
           No Suricata partition was found under {{ verify_suricata_glob }}. Ship
           Suricata telemetry to the Corpus before this run.
-          rc={{ verify_latest_partition.rc | default('none') }} stdout={{ verify_latest_partition.stdout | default('') }} stderr={{ verify_latest_partition.stderr | default('') }}
+          rc={{ verify_latest_partition.rc | default('none') }} stdout={{ verify_latest_partition.stdout | default('') }}
+          stderr={{ verify_latest_partition.stderr | default('') }}
         success_msg: The latest Suricata partition is dt={{ verify_latest_dt }}.
 
     - name: Read one Suricata partition through the view and log the S3 requests
@@ -134,8 +135,10 @@
         fail_msg: >-
           The Suricata view did not return rows from dt={{ verify_latest_dt }} through the
           instance profile. Secret: {{ verify_secret }}. Read: {{ verify_pruned }}.
-          Secret query: rc={{ verify_corpus_secret.rc | default('none') }} stdout={{ verify_corpus_secret.stdout | default('') }} stderr={{ verify_corpus_secret.stderr | default('') }}
-          Read query: rc={{ verify_pruned_read.rc | default('none') }} stdout={{ verify_pruned_read.stdout | default('') }} stderr={{ verify_pruned_read.stderr | default('') }}
+          Secret query: rc={{ verify_corpus_secret.rc | default('none') }} stdout={{ verify_corpus_secret.stdout | default('') }}
+          stderr={{ verify_corpus_secret.stderr | default('') }}
+          Read query: rc={{ verify_pruned_read.rc | default('none') }} stdout={{ verify_pruned_read.stdout | default('') }}
+          stderr={{ verify_pruned_read.stderr | default('') }}
         success_msg: >-
           suricata_events returned {{ verify_pruned.records }} rows from dt={{ verify_latest_dt }},
           signed by the {{ duckdb_corpus_secret_name }} secret from the instance profile.
@@ -148,7 +151,8 @@
         fail_msg: >-
           The query on dt={{ verify_latest_dt }} sent {{ verify_pruned.partition_requests | default('no') }}
           object requests to that partition and {{ verify_pruned.other_partition_requests | default('an unknown number of') }}
-          to other partitions. rc={{ verify_pruned_read.rc | default('none') }} stdout={{ verify_pruned_read.stdout | default('') }} stderr={{ verify_pruned_read.stderr | default('') }}
+          to other partitions. rc={{ verify_pruned_read.rc | default('none') }} stdout={{ verify_pruned_read.stdout | default('') }}
+          stderr={{ verify_pruned_read.stderr | default('') }}
         success_msg: >-
           The query on dt={{ verify_latest_dt }} sent {{ verify_pruned.partition_requests }} object
           requests, all to that partition.
@@ -172,7 +176,8 @@
           - (verify_tables.stdout | default('[{}]', true) | from_json | first).tables | default(-1) | int == 0
         fail_msg: >-
           The hunt database holds tables, so a rewritten view does not re-run over the stored
-          records alone. rc={{ verify_tables.rc | default('none') }} stdout={{ verify_tables.stdout | default('') }} stderr={{ verify_tables.stderr | default('') }}
+          records alone. rc={{ verify_tables.rc | default('none') }} stdout={{ verify_tables.stdout | default('') }}
+          stderr={{ verify_tables.stderr | default('') }}
         success_msg: >-
           The hunt database holds views only. A rewritten view re-runs over the stored records
           with no reprocessing.
@@ -204,7 +209,8 @@
         fail_msg: >-
           No Cowrie session of the Honeynet verification run was found in the last
           {{ verify_probe_lookback_days }} days. Run `atmos workflow verify -f honeynet` before this run.
-          rc={{ verify_probe_session.rc | default('none') }} stdout={{ verify_probe_session.stdout | default('') }} stderr={{ verify_probe_session.stderr | default('') }}
+          rc={{ verify_probe_session.rc | default('none') }} stdout={{ verify_probe_session.stdout | default('') }}
+          stderr={{ verify_probe_session.stderr | default('') }}
         success_msg: >-
           The probe "{{ verify_probe.input }}" is Cowrie session {{ verify_probe.session }}
           on {{ verify_probe.host }}, dt={{ verify_probe.dt }}.
@@ -243,7 +249,8 @@
         fail_msg: >-
           flow_sessions returned no Suricata flow for Cowrie session {{ verify_probe.session }}
           on {{ verify_probe.host }}, dt={{ verify_probe.dt }}. Result: {{ verify_probe_flow }}.
-          rc={{ verify_probe_join.rc | default('none') }} stdout={{ verify_probe_join.stdout | default('') }} stderr={{ verify_probe_join.stderr | default('') }}
+          rc={{ verify_probe_join.rc | default('none') }} stdout={{ verify_probe_join.stdout | default('') }}
+          stderr={{ verify_probe_join.stderr | default('') }}
         success_msg: >-
           flow_sessions joins Suricata flow {{ verify_probe_flow.flow_id }} from
           {{ verify_probe_flow.src_ip }}:{{ verify_probe_flow.src_port }} to Cowrie session
@@ -281,7 +288,8 @@
         fail_msg: >-
           The aggregation across 13 months of partitions did not complete within
           {{ verify_retention_scan_timeout_seconds }} s and {{ duckdb_memory_limit }} of memory.
-          {{ verify_retention_scan.msg | default('') }} rc={{ verify_retention_scan.rc | default('none') }} stdout={{ verify_retention_scan.stdout | default('') }} stderr={{ verify_retention_scan.stderr | default('') }}
+          {{ verify_retention_scan.msg | default('') }} rc={{ verify_retention_scan.rc | default('none') }}
+          stdout={{ verify_retention_scan.stdout | default('') }} stderr={{ verify_retention_scan.stderr | default('') }}
         success_msg: >-
           The aggregation read {{ verify_retention.records }} records from {{ verify_retention.partitions }}
           partitions, dt={{ verify_retention.first_dt }} to dt={{ verify_retention.last_dt }}.
@@ -348,6 +356,8 @@
           - verify_workstation_read.rc | default(1) == 0
         fail_msg: >-
           The Operator profile cannot list and read the Corpus from the workstation.
-          List: rc={{ verify_workstation_list.rc | default('none') }} stdout={{ verify_workstation_list.stdout | default('') }} stderr={{ verify_workstation_list.stderr | default('') }}
-          Read: rc={{ verify_workstation_read.rc | default('none') }} stdout={{ verify_workstation_read.stdout | default('') }} stderr={{ verify_workstation_read.stderr | default('') }}
+          List: rc={{ verify_workstation_list.rc | default('none') }} stdout={{ verify_workstation_list.stdout | default('') }}
+          stderr={{ verify_workstation_list.stderr | default('') }}
+          Read: rc={{ verify_workstation_read.rc | default('none') }} stdout={{ verify_workstation_read.stdout | default('') }}
+          stderr={{ verify_workstation_read.stderr | default('') }}
         success_msg: The Operator profile reads {{ verify_workstation_list.stdout | trim }} from the workstation.

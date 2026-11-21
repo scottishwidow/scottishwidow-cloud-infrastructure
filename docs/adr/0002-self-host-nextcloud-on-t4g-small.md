@@ -26,6 +26,7 @@ practical floor for AIO. Estimated cost ~US$20/month on-demand in `eu-central-1`
 Savings Plan.
 
 Required Terraform changes (to be made during implementation):
+
 - `next_cloud_instance_type` default → `t4g.small`.
 - Explicit root volume size (~30 GB gp3) on the `ec2-instance` module, since the
   AMI default is too small for container images + data + Postgres.

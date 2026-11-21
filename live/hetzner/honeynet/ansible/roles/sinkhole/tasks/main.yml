@@ -90,6 +90,7 @@
       - -out
       - "{{ sinkhole_http_directory }}/tls/sinkhole.crt"
   when: sinkhole_certificate_subject_file is changed or not sinkhole_certificate_file.stat.exists
+  changed_when: true
   notify: Restart the Sinkhole HTTP service
 
 - name: Let the Sinkhole containers read the certificate and key

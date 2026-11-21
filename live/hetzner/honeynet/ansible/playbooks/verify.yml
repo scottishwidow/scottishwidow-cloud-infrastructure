@@ -217,7 +217,8 @@
         fail_msg: >-
           port 22 banner={{ verify_cowrie_banner.msg | default('matched') }};
           port 23 session={{ verify_cowrie_telnet.stderr | default('') | trim }}{{ verify_telnet_session.command_output | default('') }};
-          port 23 hostname session={{ verify_cowrie_hostname_telnet.stderr | default('') | trim }}{{ verify_hostname_telnet_session.command_output | default('') }};
+          port 23 hostname session={{ verify_cowrie_hostname_telnet.stderr | default('') | trim }}{{ verify_hostname_telnet_session.command_output
+          | default('') }};
           port 23 persona session={{ verify_cowrie_persona_telnet.stderr | default('') | trim }}{{ verify_persona_output }};
           port 23 denied login rc={{ verify_cowrie_denied_telnet.rc | default('') }} {{ verify_cowrie_denied_telnet.stderr | default('') | trim }};
           proxy port {{ proxy_port }}={{ verify_proxy_port.msg | default('answered') }};
@@ -789,7 +790,7 @@
       failed_when: false
       check_mode: false
 
-    - name: Read the mounts that Suricata and EveBox require
+    - name: Read the mounts that Suricata and EveBox require  # noqa: command-instead-of-module
       ansible.builtin.command:
         cmd: systemctl show -p RequiresMountsFor --value {{ item.service }}
       loop: "{{ verify_log_volume_mounts | selectattr('service', 'defined') }}"
@@ -1535,7 +1536,8 @@
       when: verify_corpus_canary_event.stdout | default('') | length > 0
       ignore_errors: true
 
-    - name: Require Honeynet-only collector and time ports, a write-only Sensor session usable only from the Sensor, a refused session for another common name, a valid certificate and CA and the canary in the Corpus
+    - name: Require Honeynet-only collector and time ports, a write-only Sensor session usable only from the Sensor, a refused session for another common name,
+        a valid certificate and CA and the canary in the Corpus
       vars:
         verify_port_rules: >-
           {{ verify_input_chain.stdout_lines | map('trim')
@@ -1567,10 +1569,13 @@
           certificate={{ verify_certificate_validity.stdout_lines | default([]) }}, expected valid for {{ corpus_credential_minimum_validity_days }} more days;
           CA={{ verify_ca_validity.stdout_lines | default([]) }}, expected valid for {{ corpus_credential_minimum_validity_days }} more days;
           Sensor session rc={{ verify_sensor_session.rc | default('') }} {{ verify_sensor_session.stderr | default('') | trim }};
-          Sensor session write rc={{ verify_session_write.rc | default('not run') }} {{ verify_session_write.stdout | default('') | trim }} {{ verify_session_write.stderr | default('') | trim }};
+          Sensor session write rc={{ verify_session_write.rc | default('not run') }} {{ verify_session_write.stdout | default('') | trim }}
+          {{ verify_session_write.stderr | default('') | trim }};
           Sensor session read, list and delete={{ verify_session_denied | map(attribute='stdout', default='not run') | map('trim') | list }};
-          Sensor session write from the workstation rc={{ verify_workstation_write.rc | default('not run') }} {{ verify_workstation_write.stderr | default('') | trim }};
-          session for another common name rc={{ verify_workstation_session.rc | default('not run') }} {{ verify_workstation_session.stderr | default('') | trim }};
+          Sensor session write from the workstation rc={{ verify_workstation_write.rc | default('not run') }}
+          {{ verify_workstation_write.stderr | default('') | trim }};
+          session for another common name rc={{ verify_workstation_session.rc | default('not run') }}
+          {{ verify_workstation_session.stderr | default('') | trim }};
           canary EVE event={{ verify_corpus_canary_event.stdout | default('none', true) }};
           canary object={{ verify_corpus_canary_object.stdout | default('none', true) }} {{ verify_corpus_canary_object.stderr | default('') | trim }}
 
@@ -1673,7 +1678,7 @@
       failed_when: false
       check_mode: false
 
-    - name: Look for a Corpus credential on the Honeypot
+    - name: Look for a Corpus credential on the Honeypot  # noqa: risky-shell-pipe
       ansible.builtin.shell:
         cmd: >-
           ls -d {{ corpus_credential_directory }} {{ corpus_credential_signing_helper_path }} ~vector/.aws 2>/dev/null;
@@ -1809,7 +1814,8 @@
       until: verify_session_objects.rc == 0
       ignore_errors: true
 
-    - name: Require clock skew below one second, a Honeypot without a credential that sends only to the Sensor, disk buffers on both hops and the Session Evidence in the Corpus
+    - name: Require clock skew below one second, a Honeypot without a credential that sends only to the Sensor, disk buffers on both hops and the Session
+        Evidence in the Corpus
       vars:
         verify_offset: "{{ verify_clock_offset.stdout | default('{}', true) | from_json }}"
         verify_honeypot_sinks: "{{ (verify_vector_sinks.results[0].stdout | default('{}', true) | from_json).values() | list }}"

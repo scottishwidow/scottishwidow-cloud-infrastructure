@@ -160,6 +160,7 @@ aws ssm get-command-invocation --region "$REGION" --command-id "$CMD_ID" \
 ```
 
 Expect:
+
 - `installed: true`, `maintenance: false`, `needsDbUpgrade: false`.
 - `trusted_domains` includes `$DOMAIN`.
 
@@ -179,6 +180,7 @@ echo | openssl s_client -connect "$DOMAIN:443" -servername "$DOMAIN" 2>/dev/null
 ```
 
 Expect:
+
 - `dig` returns `$EIP`.
 - `status.php` → `http_code=200` and JSON with `"installed":true,"maintenance":false`.
 - Certificate `issuer` is **Let's Encrypt** with valid `notBefore`/`notAfter`

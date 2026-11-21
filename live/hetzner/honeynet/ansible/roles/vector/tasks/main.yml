@@ -19,7 +19,7 @@
 - name: Read the package index of the Vector repository
   ansible.builtin.apt:
     update_cache: true
-  when: vector_repository is changed
+  when: vector_repository is changed  # noqa: no-handler
 
 - name: Install Vector
   ansible.builtin.apt:

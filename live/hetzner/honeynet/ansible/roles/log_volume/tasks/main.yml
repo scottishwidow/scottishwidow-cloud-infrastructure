@@ -60,7 +60,8 @@
 
 - name: Keep the log directories to move to the Log Volume
   ansible.builtin.set_fact:
-    log_volume_migrations: "{{ log_volume_root_disk_logs.results | selectattr('matched', 'defined') | selectattr('matched', 'gt', 0) | map(attribute='item.item') | list }}"
+    log_volume_migrations: "{{ log_volume_root_disk_logs.results | selectattr('matched', 'defined') | selectattr('matched', 'gt', 0) |
+      map(attribute='item.item') | list }}"
 
 - name: Stop Suricata and EveBox before their logs move
   ansible.builtin.systemd_service:
