@@ -32,6 +32,7 @@
   ansible.builtin.file:
     path: "{{ item.source }}"
     state: directory
+    mode: "{{ item.mode }}"
   loop: "{{ log_volume_bind_mounts }}"
   loop_control:
     label: "{{ item.source }}"
