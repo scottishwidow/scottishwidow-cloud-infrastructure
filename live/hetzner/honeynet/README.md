@@ -99,7 +99,7 @@ flowchart LR
 ## Hosts
 
 | Host | Address | Runs |
-|---|---|---|
+| --- | --- | --- |
 | Sensor | Public IPv4, `10.20.0.2` | nftables, Suricata, EveBox, Squid, Sinkhole (nginx, CoreDNS), Vector, `aws_signing_helper`, chrony |
 | `honeypot-1` | `10.20.0.11`, no public IP | Cowrie and OpenCanary in Docker, Vector, timesyncd |
 | Hunt Host | AWS VPC public subnet, no inbound ports | DuckDB, the `hunt` command |
@@ -111,7 +111,7 @@ Every packet between the internet and a Honeypot goes through the Sensor. The Ho
 ## Traffic
 
 | Flow | Path | Result |
-|---|---|---|
+| --- | --- | --- |
 | Attack on a honeypot port | Sensor DNAT, then forward chain | Cowrie or OpenCanary answers. Port 445 times out. |
 | New Honeypot connection to the internet | Forward chain, rule 1 | Dropped (Containment). |
 | Honeypot HTTP, HTTPS or DNS to the internet | Sensor DNAT to the Sinkhole | The Sinkhole answers. Nothing leaves the Honeynet. |
@@ -127,7 +127,7 @@ Suricata sees all forwarded and Sinkhole flows. In IPS mode, `bypass` makes the 
 ## Ports
 
 | Public port | Honeypot port | Service |
-|---|---|---|
+| --- | --- | --- |
 | 22 | 2222 | Cowrie SSH |
 | 23 | 2223 | Cowrie Telnet |
 | 21 | 2121 | OpenCanary FTP |
@@ -139,7 +139,7 @@ Suricata sees all forwarded and Sinkhole flows. In IPS mode, `bypass` makes the 
 ## Terraform roots
 
 | Root | Stack component | Owns |
-|---|---|---|
+| --- | --- | --- |
 | `bootstrap/` | `hetzner/honeynet/bootstrap` | The Hetzner SSH key and the Sensor public IPv4. It keeps its state locally. |
 | `live/aws/honeynet/corpus/` | `aws/honeynet/corpus` | The Corpus bucket, the Sensor writer role and the Roles Anywhere trust anchor |
 | `network/` | `hetzner/honeynet/network` | The network `10.20.0.0/24` and its route to the Sensor |
@@ -152,7 +152,7 @@ Suricata sees all forwarded and Sinkhole flows. In IPS mode, `bypass` makes the 
 The workflows are in `stacks/workflows/honeynet.yaml`. All workflows need `AWS_PROFILE`. All workflows except `apply-hunt`, `configure-hunt` and `verify-hunt` also need `HONEYNET_HCLOUD_TOKEN`.
 
 | Workflow | Does |
-|---|---|
+| --- | --- |
 | `apply` | Applies `bootstrap`, generates the Sensor CA, then applies `corpus`, `network`, `sensor`, `honeypots` and `hunt`, in that order. |
 | `destroy` | Destroys `hunt`, `honeypots`, `sensor`, `network` and `bootstrap`, in that order, then deletes `pki/`. It never destroys `corpus`. |
 | `configure` | Writes the inventory from the Terraform outputs, then runs `site.yml`. |

@@ -5,7 +5,7 @@ The OVPN environment is a private Hetzner Cloud network of Private Hosts. The Ga
 ## Terraform roots
 
 | Root | Stack component | Owns |
-|---|---|---|
+| --- | --- | --- |
 | `bootstrap/` | None | The Hetzner state bucket and the admin SSH key |
 | `network/` | `hetzner/ovpn/network` | The private network `10.10.0.0/24`, its subnet, and the default route to the Gateway |
 | `openvpn/` | `hetzner/ovpn/openvpn` | The Gateway at `10.10.0.2`, its primary IPv4 and its firewall |
@@ -18,7 +18,7 @@ The OVPN environment is a private Hetzner Cloud network of Private Hosts. The Ga
 The workflows are in `stacks/workflows/hetzner-ovpn.yaml`. They need `AWS_PROFILE` and `OVPN_HCLOUD_TOKEN`.
 
 | Workflow | Does |
-|---|---|
+| --- | --- |
 | `apply` | Applies `network`, `openvpn` and `private_hosts`, in that order. |
 | `destroy` | Destroys `private_hosts`, `openvpn` and `network`, in that order. |
 | `configure` | Writes `ansible/inventory/hosts.json` from the `openvpn` outputs, then runs `openvpn.yml`. |

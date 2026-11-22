@@ -1,0 +1,53 @@
+---
+default_language_version:
+  node: 26.13.1
+
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: end-of-file-fixer
+        exclude: /templates/honeyfs/
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/antonbabenko/pre-commit-terraform
+    rev: b9e409b0fee34ee0eee7e6f6a407061f15032926  # frozen: v1.109.5
+    hooks:
+      - id: terraform_fmt
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: cbcdc463be5464e25e3e955a511599a67b9b987f  # frozen: v0.50.0
+    hooks:
+      - id: markdownlint
+        exclude: ^\.claude/
+
+  - repo: https://github.com/adrienverge/yamllint
+    rev: cba56bcde1fdd01c1deb3f945e69764c291a6530  # frozen: v1.38.0
+    hooks:
+      - id: yamllint
+        exclude: ^\.claude/
+
+  - repo: https://github.com/ansible/ansible-lint
+    rev: b74fb6f73d234bf92672372cb1c10768e4018d16  # frozen: v26.11.0
+    hooks:
+      - id: ansible-lint
+        name: ansible-lint (hetzner-honeynet)
+        entry: sh -c 'config="$PWD/.ansible-lint" && cd live/hetzner/honeynet/ansible && ansible-lint --project-dir . --config-file "$config"'
+        files: ^live/hetzner/honeynet/ansible/
+      - id: ansible-lint
+        name: ansible-lint (hetzner-ovpn)
+        entry: sh -c 'config="$PWD/.ansible-lint" && cd live/hetzner/ovpn/ansible && ansible-lint --project-dir . --config-file "$config"'
+        files: ^live/hetzner/ovpn/ansible/
+      - id: ansible-lint
+        name: ansible-lint (aws-honeynet-hunt)
+        entry: sh -c 'config="$PWD/.ansible-lint" && cd live/aws/honeynet/hunt/ansible && ansible-lint --project-dir . --config-file "$config"'
+        files: ^live/aws/honeynet/hunt/ansible/
+      - id: ansible-lint
+        name: ansible-lint (aws-management-nextcloud)
+        entry: sh -c 'config="$PWD/.ansible-lint" && cd live/aws/management/nextcloud/ansible && ansible-lint --project-dir . --config-file "$config"'
+        files: ^live/aws/management/nextcloud/ansible/

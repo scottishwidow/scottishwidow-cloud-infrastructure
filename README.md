@@ -5,7 +5,7 @@
 Each environment has one Atmos stack. The stack documentation tells how to provision, configure, verify and destroy the environment.
 
 | Environment | Path | Stack | Documentation |
-|---|---|---|---|
+| --- | --- | --- | --- |
 | Management | `live/aws/management` | `aws-management` | [Management](./live/aws/management/README.md) |
 | OVPN | `live/hetzner/ovpn` | `hetzner-ovpn` | [OVPN](./live/hetzner/ovpn/README.md) |
 | Honeynet | `live/hetzner/honeynet`, `live/aws/honeynet` | `honeynet` | [Honeynet](./live/hetzner/honeynet/README.md) |
@@ -26,7 +26,7 @@ For the terms and the relations between the environments, see [CONTEXT-MAP.md](.
 The Terraform roots keep their state in S3 buckets in `eu-central-1`:
 
 | Roots | State bucket |
-|---|---|
+| --- | --- |
 | `live/aws/management/bootstrap` | `tf-state-scottishwidow-management`, key `mgmt/bootstrap/terraform.tfstate` |
 | `live/aws/management/network` | `tf-state-scottishwidow-management`, key `mgmt/network/terraform.tfstate` |
 | `live/aws/management/nextcloud` | `tf-state-scottishwidow-management`, key `mgmt/nextcloud/terraform.tfstate` |

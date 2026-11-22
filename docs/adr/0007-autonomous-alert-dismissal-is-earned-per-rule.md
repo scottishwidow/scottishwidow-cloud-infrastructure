@@ -35,7 +35,7 @@ sufficient here, and the reason is visible in the corpus rather than theoretical
 seven triage-eligible findings, **five of the six rules fire exactly once**. The largest,
 `AWS-0164`, is n=2:
 
-```
+```text
   5  bootstrap state bucket   AWS-0086/0087/0091/0093/0132   (n=1 each)
   2  public subnets           AWS-0164 x2                    (n=2)
 ```
@@ -50,7 +50,7 @@ be real, the figure would be "100%", and it would mean nothing.
 Autonomous dismissal is granted **per rule ID**, and requires all three of:
 
 | | bar | why |
-|---|---|---|
+| --- | --- | --- |
 | **Agreement** | 100% against the human-assigned corpus | one wrong dismissal is the failure this exists to prevent; there is no acceptable error rate for closing an alert unattended |
 | **Support** | scored over **`k = 5`** findings for that rule | so that unanimity is not cheap |
 | **Grant** | the rule ID present in `security/iac_security/autonomy.json` | evidence never grants authority on its own; a human's reviewable diff does |

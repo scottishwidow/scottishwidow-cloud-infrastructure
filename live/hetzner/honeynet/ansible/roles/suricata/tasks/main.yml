@@ -19,7 +19,7 @@
 - name: Read the package index of the PPA
   ansible.builtin.apt:
     update_cache: true
-  when: suricata_ppa is changed
+  when: suricata_ppa is changed  # noqa: no-handler
 
 - name: Install Suricata
   ansible.builtin.apt:

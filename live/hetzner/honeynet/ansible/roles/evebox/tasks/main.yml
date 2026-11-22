@@ -19,7 +19,7 @@
 - name: Read the package index of the EveBox repository
   ansible.builtin.apt:
     update_cache: true
-  when: evebox_repository is changed
+  when: evebox_repository is changed  # noqa: no-handler
 
 - name: Install EveBox
   ansible.builtin.apt:

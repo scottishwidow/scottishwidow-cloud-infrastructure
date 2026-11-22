@@ -5,7 +5,7 @@ environment. It reaches the host **only over AWS Systems Manager (SSM)** — the
 is no SSH key and no inbound port 22. See
 [ADR-0001](../../../../../docs/adr/0001-ansible-over-ssm.md) and [../../CONTEXT.md](../../CONTEXT.md).
 
-```
+```text
 ansible/
 ├── ansible.cfg                          # config (auto-loaded from this dir)
 ├── requirements.yml                     # pinned collections
@@ -36,9 +36,11 @@ The control node is the operator's workstation (not the instance). It needs:
   `aws_ssm` connection plugin. Install into the **same** Python environment that
   runs Ansible, e.g. `pip install boto3 botocore`.
 - **Ansible collections** — install the pinned set:
+
   ```sh
   ansible-galaxy collection install -r requirements.yml
   ```
+
 - **AWS credentials** with:
   - `ec2:DescribeInstances` (dynamic inventory discovery), and
   - `s3:PutObject` / `s3:GetObject` / `s3:DeleteObject` on the scratch bucket.

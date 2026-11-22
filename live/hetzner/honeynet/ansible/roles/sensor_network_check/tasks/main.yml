@@ -39,7 +39,8 @@
 
 - name: Require the host network from the Sensor user data
   vars:
-    sensor_network_check_forward_rules: "{{ sensor_network_check_forward_chain.stdout_lines | map('trim') | reject('match', '^(table |chain |type |}|$)') | list }}"
+    sensor_network_check_forward_rules: "{{ sensor_network_check_forward_chain.stdout_lines | map('trim') |
+      reject('match', '^(table |chain |type |}|$)') | list }}"
     sensor_network_check_containment_rule: >-
       ^ip saddr {{ honeynet_network_ip_range }} ip daddr != {{ honeynet_network_ip_range }}
       ct state new counter packets [0-9]+ bytes [0-9]+ drop$

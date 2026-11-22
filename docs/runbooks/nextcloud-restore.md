@@ -126,7 +126,7 @@ to the damaged-but-known state, having lost nothing.
 
 ---
 
-# Escape hatch — restoring from the `pg_dumpall` (degraded)
+## Escape hatch — restoring from the `pg_dumpall` (degraded)
 
 **Do not use this as a restore path.** It exists for exactly one situation: the Postgres
 cluster itself is corrupt and will not WAL-replay, so the snapshot's database is unusable
@@ -136,7 +136,7 @@ The dumps are written by the [`nextcloud_pg_dump`](../../live/aws/management/nex
 role to `/var/backups/nextcloud/pg-YYYY-MM-DD.sql.gz` at 04:00 UTC — 30 minutes before the
 04:30 snapshot, and therefore captured *inside* it.
 
-## What it costs you
+### What it costs you
 
 Nextcloud keeps file blobs on the filesystem and their metadata in Postgres. Pairing a
 **04:00 dump** with a **04:30 filesystem** reintroduces exactly the skew the atomic snapshot
@@ -149,7 +149,7 @@ was there to eliminate:
 
 Nobody should reach for this path without knowing that.
 
-## Procedure
+### Procedure
 
 1. Restore the snapshot as above (Steps 1–5). The filesystem is now good; the database is
    the problem.
@@ -178,7 +178,7 @@ Nobody should reach for this path without knowing that.
 
 4. Run the [smoke test](nextcloud-smoke-test.md).
 
-## After any use of the escape hatch
+### After any use of the escape hatch
 
 Expect user-visible oddities in the skew window: files that reappear, files that 404. Tell
 whoever uses the instance. Trash and version history for affected files may also be
@@ -194,6 +194,6 @@ serves files — rather than trusting the procedure on the day you need it.
 
 | Date | Snapshot | Outcome | By |
 | --- | --- | --- | --- |
-| _(not yet rehearsed)_ | | | |
+| *(not yet rehearsed)* | | | |
 
 Record each rehearsal here.
