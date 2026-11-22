@@ -5,11 +5,14 @@ log_volume_bind_mounts:
   - source: "{{ log_volume_mount_point }}/suricata"
     target: /var/log/suricata
     service: suricata.service
+    mode: "0750"
   - source: "{{ log_volume_mount_point }}/evebox"
     target: /var/lib/evebox
     service: evebox.service
+    mode: "0750"
   - source: "{{ log_volume_mount_point }}/vector"
     target: /var/lib/vector
     service: vector.service
+    mode: "0750"
 
 log_volume_mount_unit: "{{ log_volume_mount_point[1:] | replace('/', '-') }}.mount"

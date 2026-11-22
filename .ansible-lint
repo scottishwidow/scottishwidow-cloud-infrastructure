@@ -1,4 +1,2 @@
 ---
-warn_list:
-  # TODO: make fatal again when #265 is closed.
-  - risky-file-permissions
+warn_list: []
