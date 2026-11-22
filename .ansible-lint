@@ -2,5 +2,3 @@
 warn_list:
   # TODO: make fatal again when #265 is closed.
   - risky-file-permissions
-  # TODO: make fatal again when #264 is closed.
-  - risky-shell-pipe

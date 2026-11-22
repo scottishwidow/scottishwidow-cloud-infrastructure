@@ -1691,8 +1691,10 @@
     - name: Read the peers of the connections that Vector holds
       ansible.builtin.shell:
         cmd: >-
+          set -o pipefail &&
           ss --tcp --numeric --processes --no-header state established
           | awk '/users:\(\("vector",/ { print $4 }'
+        executable: /bin/bash
       register: verify_vector_peers
       changed_when: false
       check_mode: false
