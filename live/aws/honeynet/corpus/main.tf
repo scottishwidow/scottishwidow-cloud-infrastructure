@@ -60,7 +60,7 @@ module "sensor_roles_anywhere" {
 
 module "sensor_writer_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role"
-  version = "6.11.1"
+  version = "6.11.3"
 
   name            = var.sensor_writer_name
   use_name_prefix = false
