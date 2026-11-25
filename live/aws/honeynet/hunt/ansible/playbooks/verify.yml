@@ -14,6 +14,10 @@
     verify_latest_dt: "{{ (verify_latest_partition.stdout | default('[{}]', true) | from_json | first).dt | default('', true) }}"
     verify_pruned: "{{ verify_pruned_read.stdout | default('[{}]', true) | from_json | first }}"
     verify_probe_lookback_days: 7
+    verify_coverage_sources:
+      - suricata
+      - cowrie
+      - opencanary
     verify_probe: "{{ verify_probe_session.stdout | default('[{}]', true) | from_json | first }}"
     verify_probe_flow: "{{ verify_probe_join.stdout | default('[{}]', true) | from_json | first }}"
     # Suricata logs a flow only after the flow times out, and Vector then batches it.
@@ -256,6 +260,45 @@
           {{ verify_probe_flow.src_ip }}:{{ verify_probe_flow.src_port }} to Cowrie session
           {{ verify_probe.session }}. The session starts {{ verify_probe_flow.session_start_offset_seconds }} s
           after the flow.
+
+    - name: Read the collection coverage of each source
+      ansible.builtin.command:
+        argv:
+          - "{{ duckdb_hunt_command_path }}"
+          - -json
+          - -bail
+          - -c
+          - >-
+            SELECT
+                source,
+                count(*) AS partitions,
+                sum(record_count) AS records,
+                min(first_event_time) AS first_event_time,
+                max(last_event_time) AS last_event_time
+            FROM corpus_coverage
+            WHERE dt >= current_date - {{ verify_probe_lookback_days }}
+            GROUP BY source
+            ORDER BY source;
+      register: verify_coverage
+      changed_when: false
+      failed_when: false
+
+    - name: Require coverage rows for each source
+      vars:
+        verify_coverage_rows: "{{ verify_coverage.stdout | default('[]', true) | from_json }}"
+        verify_covered_sources: "{{ verify_coverage_rows | map(attribute='source') | list }}"
+      ansible.builtin.assert:
+        that:
+          - verify_coverage.rc == 0
+          - verify_coverage_sources | difference(verify_covered_sources) | length == 0
+        fail_msg: >-
+          corpus_coverage has no row in the last {{ verify_probe_lookback_days }} days for
+          {{ verify_coverage_sources | difference(verify_covered_sources) }}.
+          rc={{ verify_coverage.rc | default('none') }} stdout={{ verify_coverage.stdout | default('') }}
+          stderr={{ verify_coverage.stderr | default('') }}
+        success_msg: >-
+          corpus_coverage has rows in the last {{ verify_probe_lookback_days }} days for
+          {{ verify_covered_sources | join(', ') }}: {{ verify_coverage_rows }}.
 
     - name: Count every Corpus record in the last 13 months
       ansible.builtin.command:

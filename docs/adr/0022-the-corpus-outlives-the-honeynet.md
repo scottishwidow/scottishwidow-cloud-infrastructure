@@ -51,3 +51,16 @@ address in the IAM condition survives a teardown.
 ## Amendment, 2026-11-20
 
 Atmos workflows replace the Makefile. The `honeynet` workflows hold the apply and destroy order, only `destroy-corpus` destroys `corpus`, and `make apply-hunt` is now `atmos workflow apply-hunt -f honeynet`.
+
+## Amendment, 2026-11-25
+
+The Corpus keeps 13 months. The Operator decides when the Honeynet runs. A live period of a few days is one possible pattern, not a fixed duty cycle. Thus the collection time in a month changes from month to month, and a count that is compared across periods measures uptime as well as attacker behaviour.
+
+A Hunt that compares counts across periods divides by collection time. The `corpus_coverage` view gives one row for each `source`, `host` and `dt`, with the first event time, the last event time and the record count.
+
+These options are rejected:
+
+- Run the Honeynet continuously. This adds the monthly Hetzner cost of the Sensor, `honeypot-1`, the Log Volume and the primary IPv4, and removes the Operator's control of the duty cycle.
+- Shorten `corpus_retention_days` to the duty cycle. This removes the year-on-year comparison, and the Corpus storage cost is small.
+
+Cost: the S3 storage of 13 months of Corpus objects. No Hetzner cost is added.

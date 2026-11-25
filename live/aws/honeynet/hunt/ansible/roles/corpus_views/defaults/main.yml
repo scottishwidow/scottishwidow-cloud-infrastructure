@@ -13,3 +13,4 @@ corpus_views_names:
   - opencanary_events
   - honeypot_sessions
   - flow_sessions
+  - corpus_coverage
