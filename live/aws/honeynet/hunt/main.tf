@@ -63,7 +63,7 @@ module "hunt_host_sg" {
 
 module "hunt_host_role" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role"
-  version = "6.11.1"
+  version = "6.11.3"
 
   name            = var.hunt_host_name
   use_name_prefix = false
