@@ -249,3 +249,38 @@ JOIN honeypot_sessions AS session
     AND session.src_ip = flow.src_ip
     AND session.src_port = flow.src_port
     AND session.session_start BETWEEN flow.flow_start - INTERVAL 5 SECOND AND flow.flow_end + INTERVAL 5 SECOND;
+
+
+-- Collection time differs between periods, because the Operator decides when the
+-- Honeynet runs. A Hunt that compares counts across periods divides by the
+-- collection time of each partition in this view (ADR-0022).
+CREATE VIEW corpus_coverage AS
+SELECT
+    'suricata' AS source,
+    host,
+    dt,
+    min(event_time) AS first_event_time,
+    max(event_time) AS last_event_time,
+    count(*) AS record_count
+FROM suricata_events
+GROUP BY host, dt
+UNION ALL
+SELECT
+    'cowrie' AS source,
+    host,
+    dt,
+    min(event_time) AS first_event_time,
+    max(event_time) AS last_event_time,
+    count(*) AS record_count
+FROM cowrie_events
+GROUP BY host, dt
+UNION ALL
+SELECT
+    'opencanary' AS source,
+    host,
+    dt,
+    min(event_time) AS first_event_time,
+    max(event_time) AS last_event_time,
+    count(*) AS record_count
+FROM opencanary_events
+GROUP BY host, dt;
