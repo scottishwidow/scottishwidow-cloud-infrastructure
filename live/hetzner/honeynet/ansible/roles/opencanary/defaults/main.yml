@@ -1,5 +1,5 @@
 ---
-opencanary_image: thinkst/opencanary:0.9.10
+opencanary_image: thinkst/opencanary:0.9.10@sha256:4e51338e3b6e349652b0604be656d9b8fc1cde2cd40409b2e956f1da3eb673a1
 
 opencanary_dir: /opt/opencanary
 
