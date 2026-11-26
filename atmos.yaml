@@ -2,7 +2,7 @@ base_path: "."
 
 version:
   constraint:
-    require: "1.234.1"
+    require: "1.235.0"
     enforcement: fatal
     message: "This repository requires Atmos 1.232.0 exactly."
 
