@@ -51,3 +51,11 @@ _Avoid_: Investigation, triage, analysis, threat hunt
 **Hunt Host**:
 The host that queries the Corpus. It is not a Honeynet host, it holds a credential, and it is destroyed with the Honeynet.
 _Avoid_: Analysis box, jump host, workstation
+
+**Address Registry**:
+The reference dataset that maps an IP range to the AS number and the AS organisation that held it, and to the country where the range is located, on the date of one Registry Release. It is not part of the Corpus, because no Honeynet source produces it. The country is not the country where the AS is registered.
+_Avoid_: GeoIP, threat intel, lookup table, enrichment data
+
+**Registry Release**:
+One monthly version of the Address Registry, named by its month. A Hunt reads one pinned Registry Release, so it sees the owner of an address on that month and not on the event date.
+_Avoid_: Snapshot, update, version
